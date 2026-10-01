@@ -189,3 +189,20 @@ describe('time ranges, benchmark and drill-down', () => {
     expect(types).toContain('copilot_chat')
   })
 })
+
+describe('risk page endpoints', () => {
+  const app = createApp()
+
+  it('serves a single metric with params and rejects bad params', async () => {
+    const ok = await request(app).get(`/customers/${JONAS}/metrics/what_if_shift?sector=Technology&pp=15&range=3Y`)
+    expect(ok.status).toBe(200)
+    expect(ok.body.period.range).toBe('3Y')
+    expect((await request(app).get(`/customers/${JONAS}/metrics/stress_test?scenario=nope`)).status).toBe(400)
+  })
+
+  it('ranks risk insights with the profile mismatch first for Jonas', async () => {
+    const res = await request(app).get(`/customers/${JONAS}/risk-insights?range=1Y`)
+    expect(res.body.insights[0].id).toBe('profile-above')
+    expect(res.body.insights.every((i: { detail: string }) => !i.detail.includes('undefined'))).toBe(true)
+  })
+})

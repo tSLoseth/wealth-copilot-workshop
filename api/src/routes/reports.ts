@@ -1,6 +1,7 @@
 import { Router, type NextFunction, type Request, type Response } from 'express'
 import { getCustomer, getFundHoldings } from '../data.js'
-import { listMetrics } from '../metrics/catalog.js'
+import { MetricError, computeMetric, listMetrics } from '../metrics/catalog.js'
+import { riskInsights } from '../services/riskInsights.js'
 import { AI_MODEL, generateAiReport } from '../reports/ai.js'
 import { resolveReport, sanitizeScenarios, validateSpec } from '../reports/resolve.js'
 import { getStandardReport, listStandardReports } from '../reports/standard.js'
@@ -47,6 +48,23 @@ reportsRouter.get('/customers/:customerId/history', async (req, res) => {
   if (!getCustomer(req.params.customerId)) return res.status(404).json({ error: 'Customer not found' })
   await ensureFresh(1500)
   res.json(customerHistory(req.params.customerId, rangeFrom(req.query.range), req.query.benchmark === 'OSEBX'))
+})
+
+reportsRouter.get('/customers/:customerId/metrics/:metricId', (req, res) => {
+  if (!getCustomer(req.params.customerId)) return res.status(404).json({ error: 'Customer not found' })
+  const { range, ...rest } = req.query
+  const params = Object.fromEntries(Object.entries(rest).filter(([, v]) => typeof v === 'string').map(([k, v]) => [k, Number.isFinite(Number(v)) && v !== '' ? Number(v) : String(v)]))
+  try {
+    res.json(computeMetric({ customerId: req.params.customerId, customScenarios: [], now: new Date(), range: rangeFrom(range) }, req.params.metricId, params))
+  } catch (err) {
+    res.status(err instanceof MetricError ? 400 : 500).json({ error: err instanceof Error ? err.message : 'Metric failed' })
+  }
+})
+
+reportsRouter.get('/customers/:customerId/risk-insights', (req, res) => {
+  if (!getCustomer(req.params.customerId)) return res.status(404).json({ error: 'Customer not found' })
+  const range = rangeFrom(req.query.range)
+  res.json({ customer_id: req.params.customerId, range, insights: riskInsights(req.params.customerId, range) })
 })
 
 reportsRouter.get('/customers/:customerId/exposures', (req, res) => {
