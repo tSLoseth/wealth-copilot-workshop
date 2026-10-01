@@ -20,6 +20,10 @@ tags:
     description: Customer profile and derived financial data
   - name: Wealth Copilot
     description: Deterministic, rule-based chat assistant over a customer's own data
+  - name: Reports
+    description: Standard reports, metric catalog and grounded AI-built reports (case B)
+  - name: Advisor
+    description: Advisor view of what customers have asked the AI (requires x-admin-token)
 
 paths:
   /health:
@@ -295,6 +299,125 @@ paths:
                 $ref: "#/components/schemas/Error"
         "404":
           $ref: "#/components/responses/NotFound"
+
+  /metrics:
+    get:
+      tags: [Reports]
+      summary: Metric catalog
+      description: All deterministic metrics that reports and the AI may use, with their parameters and the facts the AI can reference as {{metric_id.fact}}.
+      responses:
+        "200":
+          description: Catalog
+          content:
+            application/json:
+              schema: { type: object, properties: { metrics: { type: array, items: { type: object } } } }
+
+  /instruments/{ticker}/holdings:
+    get:
+      tags: [Reports]
+      summary: Fund look-through
+      description: What a fund owns (constituents and weights) and the date the fund reported its holdings.
+      parameters:
+        - { name: ticker, in: path, required: true, schema: { type: string, example: TECHF } }
+      responses:
+        "200": { description: Fund holdings }
+        "404": { $ref: "#/components/responses/NotFound" }
+
+  /customers/{customerId}/reports:
+    parameters:
+      - $ref: "#/components/parameters/CustomerId"
+    get:
+      tags: [Reports]
+      summary: List standard reports
+      responses:
+        "200": { description: Standard report summaries }
+        "404": { $ref: "#/components/responses/NotFound" }
+
+  /customers/{customerId}/reports/{reportId}:
+    parameters:
+      - $ref: "#/components/parameters/CustomerId"
+      - { name: reportId, in: path, required: true, schema: { type: string, enum: [risikokilder, hva-eier-du, markedsfall, datagrunnlag] } }
+    get:
+      tags: [Reports]
+      summary: A resolved standard report
+      description: Every block carries its metric with provenance, assumptions and data-quality notes. Educational model, not advice.
+      responses:
+        "200": { description: Resolved report }
+        "404": { $ref: "#/components/responses/NotFound" }
+
+  /customers/{customerId}/reports/resolve:
+    parameters:
+      - $ref: "#/components/parameters/CustomerId"
+    post:
+      tags: [Reports]
+      summary: Resolve a saved report spec with fresh numbers
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { type: object, required: [spec], properties: { spec: { type: object } } }
+      responses:
+        "200": { description: Resolved report }
+        "400": { description: The spec failed grounding validation (e.g. numbers written directly in text) }
+
+  /customers/{customerId}/reports/ai:
+    parameters:
+      - $ref: "#/components/parameters/CustomerId"
+    post:
+      tags: [Reports]
+      summary: Ask the grounded AI to build a report
+      description: >
+        Claude explores the metric catalog with tools and submits a report spec.
+        Text may only contain numbers through placeholders, so every number is
+        computed deterministically. Without ANTHROPIC_API_KEY (or on errors) the
+        closest standard report is returned with status "fallback". The question
+        and answer are logged for the customer's advisor. Rate limited per IP.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { type: object, required: [prompt], properties: { prompt: { type: string, maxLength: 1000, example: Hvor mye teknologi eier jeg egentlig? } } }
+      responses:
+        "200": { description: "AiReportResponse (status ok | refused | fallback | error)" }
+        "400": { description: Missing, empty or too long prompt }
+        "429": { description: Too many AI requests }
+
+  /admin/customers/activity:
+    get:
+      tags: [Advisor]
+      summary: Customers who have asked the AI, with topics and flags
+      parameters:
+        - { name: x-admin-token, in: header, required: true, schema: { type: string } }
+      responses:
+        "200": { description: Customer activity }
+        "401": { description: Missing or wrong admin token }
+
+  /admin/interactions:
+    get:
+      tags: [Advisor]
+      summary: Logged AI questions and answers
+      parameters:
+        - { name: x-admin-token, in: header, required: true, schema: { type: string } }
+        - { name: customerId, in: query, required: false, schema: { type: string } }
+      responses:
+        "200": { description: Interactions, newest first }
+        "401": { description: Missing or wrong admin token }
+
+  /admin/interactions/{id}:
+    patch:
+      tags: [Advisor]
+      summary: Mark an interaction as reviewed and/or add an advisor note
+      parameters:
+        - { name: x-admin-token, in: header, required: true, schema: { type: string } }
+        - { name: id, in: path, required: true, schema: { type: string } }
+      requestBody:
+        content:
+          application/json:
+            schema: { type: object, properties: { reviewed: { type: boolean }, advisor_note: { type: string } } }
+      responses:
+        "200": { description: Updated interaction }
+        "401": { description: Missing or wrong admin token }
+        "404": { $ref: "#/components/responses/NotFound" }
 
 components:
   parameters:

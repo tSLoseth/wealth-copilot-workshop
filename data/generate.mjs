@@ -10,7 +10,7 @@
 import { writeFile } from 'node:fs/promises'
 import path from 'node:path'
 import { fileURLToPath } from 'node:url'
-import { ALL_INSTRUMENTS } from './instruments.mjs'
+import { ALL_INSTRUMENTS, FUND_COMPOSITION, INDEX_ONLY_BONDS, INDEX_ONLY_EQUITIES } from './instruments.mjs'
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url))
 const SEED = 42
@@ -30,6 +30,10 @@ function mulberry32(seed) {
   }
 }
 const rng = mulberry32(SEED)
+// Separate stream for market factors, index-only instruments and the case
+// persona, so adding them leaves every other generated customer unchanged.
+const factorRng = mulberry32(SEED + 1)
+const factorFloat = (min, max) => factorRng() * (max - min) + min
 const pick = (arr) => arr[Math.floor(rng() * arr.length)]
 const int = (min, max) => Math.floor(rng() * (max - min + 1)) + min
 const float = (min, max, decimals = 2) => Number((rng() * (max - min) + min).toFixed(decimals))
@@ -116,38 +120,110 @@ for (const customer of customers) {
 }
 
 // --- Market data -----------------------------------------------------------
-// One year of daily prices per instrument, generated as a bounded random
-// walk so portfolio performance calculations have something meaningful to
-// show. Purely synthetic - not derived from any real market feed.
+// Daily prices per instrument, purely synthetic. Instruments share a market
+// factor (plus a technology factor for tech) so they move together like real
+// markets, and every fund's daily return is the weighted return of what it
+// holds - so the look-through in fund_holdings.json and the fund's price
+// behaviour are consistent.
 const today = new Date('2026-09-06T00:00:00Z')
+const dates = []
+for (let d = MARKET_DATA_DAYS - 1; d >= 0; d -= 1) {
+  const date = new Date(today)
+  date.setUTCDate(date.getUTCDate() - d)
+  dates.push(date.toISOString().slice(0, 10))
+}
+
+// Idiosyncratic draws come from the main stream in the original order, so
+// every later draw (holdings, transactions) stays identical to before.
+const idiosyncratic = new Map()
+for (const instrument of ALL_INSTRUMENTS) {
+  const draws = []
+  for (let d = 0; d < MARKET_DATA_DAYS; d += 1) {
+    if (instrument.assetType === 'Cash') draws.push(0)
+    else if (instrument.assetType === 'Bond') draws.push(float(-0.15, 0.18, 4) / 100)
+    else draws.push(float(-2.2, 2.3, 4) / 100)
+  }
+  idiosyncratic.set(instrument.ticker, draws)
+}
+const INDEX_ONLY = [
+  ...INDEX_ONLY_EQUITIES.map((i) => ({ ...i, assetType: 'Equity' })),
+  ...INDEX_ONLY_BONDS.map((i) => ({ ...i, assetType: 'Bond' })),
+]
+for (const instrument of INDEX_ONLY) {
+  const draws = []
+  for (let d = 0; d < MARKET_DATA_DAYS; d += 1) {
+    draws.push(instrument.assetType === 'Bond' ? factorFloat(-0.15, 0.18) / 100 : factorFloat(-2.2, 2.3) / 100)
+  }
+  idiosyncratic.set(instrument.ticker, draws)
+}
+
+const marketFactor = []
+const techFactor = []
+for (let d = 0; d < MARKET_DATA_DAYS; d += 1) {
+  marketFactor.push(factorFloat(-1.3, 1.4) / 100)
+  techFactor.push(factorFloat(-1.6, 1.62) / 100)
+}
+
+const instrumentByTicker = new Map([...ALL_INSTRUMENTS, ...INDEX_ONLY].map((i) => [i.ticker, i]))
+const returnsByTicker = new Map()
+for (const instrument of instrumentByTicker.values()) {
+  if (FUND_COMPOSITION[instrument.ticker]) continue
+  const idio = idiosyncratic.get(instrument.ticker)
+  returnsByTicker.set(instrument.ticker, idio.map((r, d) => {
+    if (instrument.assetType === 'Cash') return 0
+    if (instrument.assetType === 'Bond') return r
+    return r * 0.6 + marketFactor[d] + (instrument.sector === 'Technology' ? techFactor[d] : 0)
+  }))
+}
+
+// Normalised fund weights (fraction of the fund) per constituent.
+const fundWeights = new Map()
+for (const [fund, raw] of Object.entries(FUND_COMPOSITION)) {
+  const total = Object.values(raw).reduce((s, w) => s + w, 0)
+  fundWeights.set(fund, Object.entries(raw).map(([ticker, w]) => ({ ticker, weight: w / total })))
+}
+for (const [fund, weights] of fundWeights) {
+  const idio = idiosyncratic.get(fund)
+  returnsByTicker.set(fund, idio.map((r, d) =>
+    weights.reduce((s, { ticker, weight }) => s + weight * returnsByTicker.get(ticker)[d], 0) + r * 0.05))
+}
+
 const marketData = []
 const latestPriceByTicker = new Map()
-for (const instrument of ALL_INSTRUMENTS) {
+for (const instrument of instrumentByTicker.values()) {
   let price = instrument.basePrice
-  const dailyPrices = []
-  for (let d = MARKET_DATA_DAYS - 1; d >= 0; d -= 1) {
-    const date = new Date(today)
-    date.setUTCDate(date.getUTCDate() - d)
-    let dailyReturn = 0
-    if (instrument.assetType === 'Cash') {
-      dailyReturn = 0
-    } else if (instrument.assetType === 'Bond') {
-      dailyReturn = float(-0.15, 0.18, 4) / 100
-    } else {
-      dailyReturn = float(-2.2, 2.3, 4) / 100
-    }
+  returnsByTicker.get(instrument.ticker).forEach((dailyReturn, d) => {
     price = Math.max(0.5, price * (1 + dailyReturn))
-    dailyPrices.push({
+    marketData.push({
       ticker: instrument.ticker,
-      date: date.toISOString().slice(0, 10),
+      date: dates[d],
       price: Number(price.toFixed(2)),
       daily_return: Number((dailyReturn * 100).toFixed(4)),
       sector: instrument.sector,
       geography: instrument.geography,
     })
-  }
-  marketData.push(...dailyPrices)
+  })
   latestPriceByTicker.set(instrument.ticker, price)
+}
+
+// Funds report their holdings with a delay, like real fund disclosures.
+const holdingsAsOf = new Date(today)
+holdingsAsOf.setUTCDate(holdingsAsOf.getUTCDate() - 31)
+const fundHoldings = []
+for (const [fund, weights] of fundWeights) {
+  for (const { ticker, weight } of weights) {
+    const constituent = instrumentByTicker.get(ticker)
+    fundHoldings.push({
+      fund_ticker: fund,
+      constituent_ticker: ticker,
+      name: constituent.name,
+      asset_type: constituent.assetType,
+      sector: constituent.sector,
+      geography: constituent.geography,
+      weight_pct: Number((weight * 100).toFixed(4)),
+      as_of_date: holdingsAsOf.toISOString().slice(0, 10),
+    })
+  }
 }
 
 // --- Investments -------------------------------------------------------
@@ -253,6 +329,92 @@ for (const customer of customers) {
 }
 transactions.sort((a, b) => (a.date < b.date ? -1 : a.date > b.date ? 1 : 0))
 
+// --- Case persona: Jonas (36) ---------------------------------------------
+// Workshop case B: a moderate risk profile whose portfolio has drifted towards
+// technology stocks and global equity funds.
+const JONAS_ID = makeCustomerId(CUSTOMER_COUNT + 1)
+customers.push({
+  customer_id: JONAS_ID,
+  first_name: 'Jonas',
+  last_name: 'Lie',
+  age: 36,
+  country: 'Norway',
+  risk_profile: 'Moderate',
+  investment_horizon: '10-20 years',
+  annual_income: 780000,
+  customer_since: '2014-03-12',
+})
+const jonasCurrent = addAccount(JONAS_ID, 'Current Account', 'NOK', 38450.2)
+const jonasSavings = addAccount(JONAS_ID, 'Savings', 'NOK', 112300)
+const jonasInvest = addAccount(JONAS_ID, 'Investment Account', 'NOK', 0)
+const jonasPension = addAccount(JONAS_ID, 'Pension', 'NOK', 0)
+const JONAS_TARGET_VALUE = 1250000
+const JONAS_HOLDINGS = [
+  { ticker: 'TECHF', weight: 0.24, account: jonasInvest, gain: 1.42 },
+  { ticker: 'USTK', weight: 0.19, account: jonasInvest, gain: 1.55 },
+  { ticker: 'GLBEQ', weight: 0.18, account: jonasPension, gain: 1.21 },
+  { ticker: 'MFBAL', weight: 0.1, account: jonasPension, gain: 1.08 },
+  { ticker: 'OSLC', weight: 0.09, account: jonasInvest, gain: 1.3 },
+  { ticker: 'CORPB', weight: 0.08, account: jonasPension, gain: 1.01 },
+  { ticker: 'HELS', weight: 0.06, account: jonasInvest, gain: 0.92 },
+  { ticker: 'CASHNOK', weight: 0.06, account: jonasInvest, gain: 1 },
+]
+for (const holding of JONAS_HOLDINGS) {
+  const instrument = ALL_INSTRUMENTS.find((i) => i.ticker === holding.ticker)
+  const currentPrice = latestPriceByTicker.get(holding.ticker)
+  investments.push({
+    investment_id: `INV-${String(investmentCounter).padStart(6, '0')}`,
+    customer_id: JONAS_ID,
+    account_id: holding.account.account_id,
+    asset_type: instrument.assetType,
+    ticker: instrument.ticker,
+    name: instrument.name,
+    quantity: Math.max(1, Math.round((JONAS_TARGET_VALUE * holding.weight) / currentPrice)),
+    purchase_price: Number((currentPrice / holding.gain).toFixed(2)),
+    current_price: currentPrice,
+    currency: 'NOK',
+    sector: instrument.sector,
+    geography: instrument.geography,
+  })
+  investmentCounter += 1
+}
+for (const account of [jonasInvest, jonasPension]) {
+  account.balance = Number(investments
+    .filter((i) => i.account_id === account.account_id)
+    .reduce((sum, i) => sum + i.quantity * i.current_price, 0)
+    .toFixed(2))
+}
+const JONAS_MONTHLY = [
+  { day: 1, type: 'credit', category: 'Salary', description: 'Monthly salary', amount: 41200, account: jonasCurrent },
+  { day: 2, type: 'debit', category: 'Housing', description: 'Mortgage payment', amount: -14800, account: jonasCurrent },
+  { day: 3, type: 'transfer', category: 'Investments', description: 'Monthly savings plan', amount: -6000, account: jonasInvest },
+  { day: 5, type: 'debit', category: 'Utilities', description: 'Electricity bill', amount: -1350, account: jonasCurrent },
+  { day: 9, type: 'debit', category: 'Groceries', description: 'Supermarket', amount: -2890, account: jonasCurrent },
+  { day: 14, type: 'debit', category: 'Subscriptions', description: 'Gym membership', amount: -549, account: jonasCurrent },
+  { day: 18, type: 'debit', category: 'Restaurants', description: 'Restaurant', amount: -1240, account: jonasCurrent },
+  { day: 22, type: 'transfer', category: 'Transfers', description: 'Transfer to savings', amount: -3000, account: jonasSavings },
+  { day: 25, type: 'debit', category: 'Shopping', description: 'Electronics store', amount: -2100, account: jonasCurrent },
+]
+for (let monthOffset = TRANSACTION_MONTHS - 1; monthOffset >= 0; monthOffset -= 1) {
+  const monthDate = new Date(today)
+  monthDate.setUTCMonth(monthDate.getUTCMonth() - monthOffset)
+  for (const entry of JONAS_MONTHLY) {
+    transactions.push({
+      transaction_id: `TXN-${String(transactionCounter).padStart(7, '0')}`,
+      customer_id: JONAS_ID,
+      account_id: entry.account.account_id,
+      date: new Date(Date.UTC(monthDate.getUTCFullYear(), monthDate.getUTCMonth(), entry.day)).toISOString().slice(0, 10),
+      type: entry.type,
+      category: entry.category,
+      description: entry.description,
+      amount: entry.amount,
+      currency: 'NOK',
+    })
+    transactionCounter += 1
+  }
+}
+transactions.sort((a, b) => (a.date < b.date ? -1 : a.date > b.date ? 1 : 0))
+
 // --- Write output ----------------------------------------------------------
 async function writeJson(fileName, value) {
   const filePath = path.join(__dirname, fileName)
@@ -265,5 +427,6 @@ await writeJson('accounts.json', accounts)
 await writeJson('transactions.json', transactions)
 await writeJson('investments.json', investments)
 await writeJson('market_data.json', marketData)
+await writeJson('fund_holdings.json', fundHoldings)
 
 console.log('Done. All data is 100% synthetic / fictional.')

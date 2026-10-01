@@ -1098,5 +1098,16 @@
     "investment_horizon": "3-5 years",
     "annual_income": 1690000,
     "customer_since": "2006-12-18"
+  },
+  {
+    "customer_id": "CUST-00101",
+    "first_name": "Jonas",
+    "last_name": "Lie",
+    "age": 36,
+    "country": "Norway",
+    "risk_profile": "Moderate",
+    "investment_horizon": "10-20 years",
+    "annual_income": 780000,
+    "customer_since": "2014-03-12"
   }
 ]

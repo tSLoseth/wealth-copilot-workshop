@@ -9,3 +9,13 @@ services:
     envVars:
       - key: NODE_VERSION
         value: "22"
+      - key: ANTHROPIC_API_KEY
+        sync: false
+      - key: DATABASE_URL
+        sync: false
+      - key: ADMIN_TOKEN
+        sync: false
+      - key: ALLOWED_ORIGIN
+        sync: false
+      - key: AI_EFFORT
+        value: low

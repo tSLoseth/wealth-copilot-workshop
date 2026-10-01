@@ -8,7 +8,7 @@
 import { readFileSync } from 'node:fs'
 import path from 'node:path'
 import { fileURLToPath } from 'node:url'
-import type { Account, Customer, Instrument, Investment, MarketDataPoint, Transaction } from './types.js'
+import type { Account, Customer, FundHolding, Instrument, Investment, MarketDataPoint, Transaction } from './types.js'
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url))
 // Both `src` (via tsx) and `dist` (built) sit directly under /api, so the
@@ -26,6 +26,7 @@ export const accounts: Account[] = loadJson<Account[]>('accounts.json')
 export const transactions: Transaction[] = loadJson<Transaction[]>('transactions.json')
 export const investments: Investment[] = loadJson<Investment[]>('investments.json')
 export const marketData: MarketDataPoint[] = loadJson<MarketDataPoint[]>('market_data.json')
+export const fundHoldings: FundHolding[] = loadJson<FundHolding[]>('fund_holdings.json')
 
 const investmentValueByAccount = new Map<string, number>()
 for (const investment of investments) {
@@ -108,4 +109,21 @@ export function getAllInstruments(): Instrument[] {
 // All holdings across all customers (flattened).
 export function getAllHoldings(): Investment[] {
   return investments
+}
+
+const fundHoldingsByFund = new Map<string, FundHolding[]>()
+for (const row of fundHoldings) {
+  const list = fundHoldingsByFund.get(row.fund_ticker) ?? []
+  list.push(row)
+  fundHoldingsByFund.set(row.fund_ticker, list)
+}
+for (const list of fundHoldingsByFund.values()) list.sort((a, b) => b.weight_pct - a.weight_pct)
+
+// Look-through holdings of a fund, or an empty list for anything that isn't a fund.
+export function getFundHoldings(ticker: string): FundHolding[] {
+  return fundHoldingsByFund.get(ticker) ?? []
+}
+
+export function isFund(ticker: string): boolean {
+  return fundHoldingsByFund.has(ticker)
 }

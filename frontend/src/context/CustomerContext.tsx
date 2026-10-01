@@ -16,7 +16,8 @@ const CustomerContext = createContext<CustomerContextValue | undefined>(undefine
 // A small, fixed set of "featured" customers shown first in the selector so
 // workshop participants land on a realistic, varied set of situations
 // (rather than the raw alphabetical/generation order of all 500 records).
-const FEATURED_CUSTOMER_IDS = ['CUST-00001', 'CUST-00002', 'CUST-00003', 'CUST-00004', 'CUST-00005']
+// CUST-00101 (Jonas Lie) is the persona for the Rapporter case and is selected by default.
+const FEATURED_CUSTOMER_IDS = ['CUST-00101', 'CUST-00001', 'CUST-00002', 'CUST-00003', 'CUST-00004', 'CUST-00005']
 
 export function CustomerProvider({ children }: { children: ReactNode }) {
   const [customers, setCustomers] = useState<Customer[]>([])

@@ -1,0 +1,1122 @@
+[
+  {
+    "fund_ticker": "TECHF",
+    "constituent_ticker": "USTK",
+    "name": "US TechCore Inc.",
+    "asset_type": "Equity",
+    "sector": "Technology",
+    "geography": "United States",
+    "weight_pct": 14,
+    "as_of_date": "2026-08-06"
+  },
+  {
+    "fund_ticker": "TECHF",
+    "constituent_ticker": "AMSW",
+    "name": "AmeriSoft Platforms Inc.",
+    "asset_type": "Equity",
+    "sector": "Technology",
+    "geography": "United States",
+    "weight_pct": 14,
+    "as_of_date": "2026-08-06"
+  },
+  {
+    "fund_ticker": "TECHF",
+    "constituent_ticker": "PSEM",
+    "name": "Pacific Semiconductor Corp",
+    "asset_type": "Equity",
+    "sector": "Technology",
+    "geography": "Asia Pacific",
+    "weight_pct": 12,
+    "as_of_date": "2026-08-06"
+  },
+  {
+    "fund_ticker": "TECHF",
+    "constituent_ticker": "NCLD",
+    "name": "NorthCloud Data Inc.",
+    "asset_type": "Equity",
+    "sector": "Technology",
+    "geography": "United States",
+    "weight_pct": 11,
+    "as_of_date": "2026-08-06"
+  },
+  {
+    "fund_ticker": "TECHF",
+    "constituent_ticker": "QBIT",
+    "name": "Quantum Bits Corp",
+    "asset_type": "Equity",
+    "sector": "Technology",
+    "geography": "United States",
+    "weight_pct": 8,
+    "as_of_date": "2026-08-06"
+  },
+  {
+    "fund_ticker": "TECHF",
+    "constituent_ticker": "EUSW",
+    "name": "EuroSoft Systems SE",
+    "asset_type": "Equity",
+    "sector": "Technology",
+    "geography": "Europe",
+    "weight_pct": 8,
+    "as_of_date": "2026-08-06"
+  },
+  {
+    "fund_ticker": "TECHF",
+    "constituent_ticker": "ASIP",
+    "name": "AsiaPac Innovations Ltd",
+    "asset_type": "Equity",
+    "sector": "Technology",
+    "geography": "Asia Pacific",
+    "weight_pct": 8,
+    "as_of_date": "2026-08-06"
+  },
+  {
+    "fund_ticker": "TECHF",
+    "constituent_ticker": "OSLC",
+    "name": "Oslo Cloud Systems ASA",
+    "asset_type": "Equity",
+    "sector": "Technology",
+    "geography": "Norway",
+    "weight_pct": 7,
+    "as_of_date": "2026-08-06"
+  },
+  {
+    "fund_ticker": "TECHF",
+    "constituent_ticker": "INDT",
+    "name": "IndiaTech Services Ltd",
+    "asset_type": "Equity",
+    "sector": "Technology",
+    "geography": "Emerging Markets",
+    "weight_pct": 7,
+    "as_of_date": "2026-08-06"
+  },
+  {
+    "fund_ticker": "TECHF",
+    "constituent_ticker": "HELS",
+    "name": "Helsinki Circuit Technologies",
+    "asset_type": "Equity",
+    "sector": "Technology",
+    "geography": "Finland",
+    "weight_pct": 6,
+    "as_of_date": "2026-08-06"
+  },
+  {
+    "fund_ticker": "TECHF",
+    "constituent_ticker": "CASHNOK",
+    "name": "Cash (NOK)",
+    "asset_type": "Cash",
+    "sector": "Cash",
+    "geography": "Norway",
+    "weight_pct": 5,
+    "as_of_date": "2026-08-06"
+  },
+  {
+    "fund_ticker": "GLBEQ",
+    "constituent_ticker": "AMSW",
+    "name": "AmeriSoft Platforms Inc.",
+    "asset_type": "Equity",
+    "sector": "Technology",
+    "geography": "United States",
+    "weight_pct": 7.7778,
+    "as_of_date": "2026-08-06"
+  },
+  {
+    "fund_ticker": "GLBEQ",
+    "constituent_ticker": "USTK",
+    "name": "US TechCore Inc.",
+    "asset_type": "Equity",
+    "sector": "Technology",
+    "geography": "United States",
+    "weight_pct": 6.6667,
+    "as_of_date": "2026-08-06"
+  },
+  {
+    "fund_ticker": "GLBEQ",
+    "constituent_ticker": "NCLD",
+    "name": "NorthCloud Data Inc.",
+    "asset_type": "Equity",
+    "sector": "Technology",
+    "geography": "United States",
+    "weight_pct": 4.4444,
+    "as_of_date": "2026-08-06"
+  },
+  {
+    "fund_ticker": "GLBEQ",
+    "constituent_ticker": "PSEM",
+    "name": "Pacific Semiconductor Corp",
+    "asset_type": "Equity",
+    "sector": "Technology",
+    "geography": "Asia Pacific",
+    "weight_pct": 4.4444,
+    "as_of_date": "2026-08-06"
+  },
+  {
+    "fund_ticker": "GLBEQ",
+    "constituent_ticker": "QBIT",
+    "name": "Quantum Bits Corp",
+    "asset_type": "Equity",
+    "sector": "Technology",
+    "geography": "United States",
+    "weight_pct": 2.2222,
+    "as_of_date": "2026-08-06"
+  },
+  {
+    "fund_ticker": "GLBEQ",
+    "constituent_ticker": "EUSW",
+    "name": "EuroSoft Systems SE",
+    "asset_type": "Equity",
+    "sector": "Technology",
+    "geography": "Europe",
+    "weight_pct": 2.2222,
+    "as_of_date": "2026-08-06"
+  },
+  {
+    "fund_ticker": "GLBEQ",
+    "constituent_ticker": "ASIP",
+    "name": "AsiaPac Innovations Ltd",
+    "asset_type": "Equity",
+    "sector": "Technology",
+    "geography": "Asia Pacific",
+    "weight_pct": 2.2222,
+    "as_of_date": "2026-08-06"
+  },
+  {
+    "fund_ticker": "GLBEQ",
+    "constituent_ticker": "INDT",
+    "name": "IndiaTech Services Ltd",
+    "asset_type": "Equity",
+    "sector": "Technology",
+    "geography": "Emerging Markets",
+    "weight_pct": 2.2222,
+    "as_of_date": "2026-08-06"
+  },
+  {
+    "fund_ticker": "GLBEQ",
+    "constituent_ticker": "USHL",
+    "name": "US HealthLine Corp",
+    "asset_type": "Equity",
+    "sector": "Healthcare",
+    "geography": "United States",
+    "weight_pct": 5.5556,
+    "as_of_date": "2026-08-06"
+  },
+  {
+    "fund_ticker": "GLBEQ",
+    "constituent_ticker": "USFN",
+    "name": "US Federal Financial Corp",
+    "asset_type": "Equity",
+    "sector": "Financials",
+    "geography": "United States",
+    "weight_pct": 5.5556,
+    "as_of_date": "2026-08-06"
+  },
+  {
+    "fund_ticker": "GLBEQ",
+    "constituent_ticker": "USCS",
+    "name": "US Consumer Brands Corp",
+    "asset_type": "Equity",
+    "sector": "Consumer Discretionary",
+    "geography": "United States",
+    "weight_pct": 6.6667,
+    "as_of_date": "2026-08-06"
+  },
+  {
+    "fund_ticker": "GLBEQ",
+    "constituent_ticker": "USEN",
+    "name": "US Energy Partners",
+    "asset_type": "Equity",
+    "sector": "Energy",
+    "geography": "United States",
+    "weight_pct": 4.4444,
+    "as_of_date": "2026-08-06"
+  },
+  {
+    "fund_ticker": "GLBEQ",
+    "constituent_ticker": "EUPH",
+    "name": "EuroPharma AG",
+    "asset_type": "Equity",
+    "sector": "Healthcare",
+    "geography": "Europe",
+    "weight_pct": 5.5556,
+    "as_of_date": "2026-08-06"
+  },
+  {
+    "fund_ticker": "GLBEQ",
+    "constituent_ticker": "EUBK",
+    "name": "EuroBank Group",
+    "asset_type": "Equity",
+    "sector": "Financials",
+    "geography": "Europe",
+    "weight_pct": 4.4444,
+    "as_of_date": "2026-08-06"
+  },
+  {
+    "fund_ticker": "GLBEQ",
+    "constituent_ticker": "EURX",
+    "name": "EuroSpan Logistics SE",
+    "asset_type": "Equity",
+    "sector": "Industrials",
+    "geography": "Europe",
+    "weight_pct": 3.3333,
+    "as_of_date": "2026-08-06"
+  },
+  {
+    "fund_ticker": "GLBEQ",
+    "constituent_ticker": "ATLX",
+    "name": "Atlantic Retail Group",
+    "asset_type": "Equity",
+    "sector": "Consumer Discretionary",
+    "geography": "Europe",
+    "weight_pct": 3.3333,
+    "as_of_date": "2026-08-06"
+  },
+  {
+    "fund_ticker": "GLBEQ",
+    "constituent_ticker": "JPIN",
+    "name": "Nippon Industrial Co.",
+    "asset_type": "Equity",
+    "sector": "Industrials",
+    "geography": "Asia Pacific",
+    "weight_pct": 4.4444,
+    "as_of_date": "2026-08-06"
+  },
+  {
+    "fund_ticker": "GLBEQ",
+    "constituent_ticker": "ASIM",
+    "name": "AsiaPac Manufacturing Ltd",
+    "asset_type": "Equity",
+    "sector": "Industrials",
+    "geography": "Asia Pacific",
+    "weight_pct": 3.3333,
+    "as_of_date": "2026-08-06"
+  },
+  {
+    "fund_ticker": "GLBEQ",
+    "constituent_ticker": "NRSK",
+    "name": "Norsk Fjord Energy AS",
+    "asset_type": "Equity",
+    "sector": "Energy",
+    "geography": "Norway",
+    "weight_pct": 3.3333,
+    "as_of_date": "2026-08-06"
+  },
+  {
+    "fund_ticker": "GLBEQ",
+    "constituent_ticker": "VIKB",
+    "name": "Viking Bank Group",
+    "asset_type": "Equity",
+    "sector": "Financials",
+    "geography": "Nordics",
+    "weight_pct": 2.2222,
+    "as_of_date": "2026-08-06"
+  },
+  {
+    "fund_ticker": "GLBEQ",
+    "constituent_ticker": "NRDX",
+    "name": "NordicRx Pharma",
+    "asset_type": "Equity",
+    "sector": "Healthcare",
+    "geography": "Nordics",
+    "weight_pct": 3.3333,
+    "as_of_date": "2026-08-06"
+  },
+  {
+    "fund_ticker": "GLBEQ",
+    "constituent_ticker": "SVEA",
+    "name": "Svea Green Materials",
+    "asset_type": "Equity",
+    "sector": "Materials",
+    "geography": "Sweden",
+    "weight_pct": 2.2222,
+    "as_of_date": "2026-08-06"
+  },
+  {
+    "fund_ticker": "GLBEQ",
+    "constituent_ticker": "DANM",
+    "name": "Danmark Wind Partners",
+    "asset_type": "Equity",
+    "sector": "Utilities",
+    "geography": "Denmark",
+    "weight_pct": 2.2222,
+    "as_of_date": "2026-08-06"
+  },
+  {
+    "fund_ticker": "GLBEQ",
+    "constituent_ticker": "BRMN",
+    "name": "Brasil Mining SA",
+    "asset_type": "Equity",
+    "sector": "Materials",
+    "geography": "Emerging Markets",
+    "weight_pct": 3.3333,
+    "as_of_date": "2026-08-06"
+  },
+  {
+    "fund_ticker": "GLBEQ",
+    "constituent_ticker": "EMKT",
+    "name": "Emerging Markets Growth Co",
+    "asset_type": "Equity",
+    "sector": "Consumer Discretionary",
+    "geography": "Emerging Markets",
+    "weight_pct": 3.3333,
+    "as_of_date": "2026-08-06"
+  },
+  {
+    "fund_ticker": "GLBEQ",
+    "constituent_ticker": "CASHNOK",
+    "name": "Cash (NOK)",
+    "asset_type": "Cash",
+    "sector": "Cash",
+    "geography": "Norway",
+    "weight_pct": 1.1111,
+    "as_of_date": "2026-08-06"
+  },
+  {
+    "fund_ticker": "NRDEQ",
+    "constituent_ticker": "NRSK",
+    "name": "Norsk Fjord Energy AS",
+    "asset_type": "Equity",
+    "sector": "Energy",
+    "geography": "Norway",
+    "weight_pct": 14,
+    "as_of_date": "2026-08-06"
+  },
+  {
+    "fund_ticker": "NRDEQ",
+    "constituent_ticker": "NRDX",
+    "name": "NordicRx Pharma",
+    "asset_type": "Equity",
+    "sector": "Healthcare",
+    "geography": "Nordics",
+    "weight_pct": 13,
+    "as_of_date": "2026-08-06"
+  },
+  {
+    "fund_ticker": "NRDEQ",
+    "constituent_ticker": "VIKB",
+    "name": "Viking Bank Group",
+    "asset_type": "Equity",
+    "sector": "Financials",
+    "geography": "Nordics",
+    "weight_pct": 12,
+    "as_of_date": "2026-08-06"
+  },
+  {
+    "fund_ticker": "NRDEQ",
+    "constituent_ticker": "BRGN",
+    "name": "Bergen Maritime Holdings",
+    "asset_type": "Equity",
+    "sector": "Industrials",
+    "geography": "Norway",
+    "weight_pct": 10,
+    "as_of_date": "2026-08-06"
+  },
+  {
+    "fund_ticker": "NRDEQ",
+    "constituent_ticker": "FJEL",
+    "name": "Fjellblå Seafood ASA",
+    "asset_type": "Equity",
+    "sector": "Consumer Staples",
+    "geography": "Norway",
+    "weight_pct": 9,
+    "as_of_date": "2026-08-06"
+  },
+  {
+    "fund_ticker": "NRDEQ",
+    "constituent_ticker": "SVEA",
+    "name": "Svea Green Materials",
+    "asset_type": "Equity",
+    "sector": "Materials",
+    "geography": "Sweden",
+    "weight_pct": 9,
+    "as_of_date": "2026-08-06"
+  },
+  {
+    "fund_ticker": "NRDEQ",
+    "constituent_ticker": "DANM",
+    "name": "Danmark Wind Partners",
+    "asset_type": "Equity",
+    "sector": "Utilities",
+    "geography": "Denmark",
+    "weight_pct": 9,
+    "as_of_date": "2026-08-06"
+  },
+  {
+    "fund_ticker": "NRDEQ",
+    "constituent_ticker": "OSLC",
+    "name": "Oslo Cloud Systems ASA",
+    "asset_type": "Equity",
+    "sector": "Technology",
+    "geography": "Norway",
+    "weight_pct": 8,
+    "as_of_date": "2026-08-06"
+  },
+  {
+    "fund_ticker": "NRDEQ",
+    "constituent_ticker": "HELS",
+    "name": "Helsinki Circuit Technologies",
+    "asset_type": "Equity",
+    "sector": "Technology",
+    "geography": "Finland",
+    "weight_pct": 7,
+    "as_of_date": "2026-08-06"
+  },
+  {
+    "fund_ticker": "NRDEQ",
+    "constituent_ticker": "CASHNOK",
+    "name": "Cash (NOK)",
+    "asset_type": "Cash",
+    "sector": "Cash",
+    "geography": "Norway",
+    "weight_pct": 9,
+    "as_of_date": "2026-08-06"
+  },
+  {
+    "fund_ticker": "EMGEQ",
+    "constituent_ticker": "PSEM",
+    "name": "Pacific Semiconductor Corp",
+    "asset_type": "Equity",
+    "sector": "Technology",
+    "geography": "Asia Pacific",
+    "weight_pct": 18,
+    "as_of_date": "2026-08-06"
+  },
+  {
+    "fund_ticker": "EMGEQ",
+    "constituent_ticker": "INDT",
+    "name": "IndiaTech Services Ltd",
+    "asset_type": "Equity",
+    "sector": "Technology",
+    "geography": "Emerging Markets",
+    "weight_pct": 16,
+    "as_of_date": "2026-08-06"
+  },
+  {
+    "fund_ticker": "EMGEQ",
+    "constituent_ticker": "EMKT",
+    "name": "Emerging Markets Growth Co",
+    "asset_type": "Equity",
+    "sector": "Consumer Discretionary",
+    "geography": "Emerging Markets",
+    "weight_pct": 16,
+    "as_of_date": "2026-08-06"
+  },
+  {
+    "fund_ticker": "EMGEQ",
+    "constituent_ticker": "BRMN",
+    "name": "Brasil Mining SA",
+    "asset_type": "Equity",
+    "sector": "Materials",
+    "geography": "Emerging Markets",
+    "weight_pct": 14,
+    "as_of_date": "2026-08-06"
+  },
+  {
+    "fund_ticker": "EMGEQ",
+    "constituent_ticker": "ASIM",
+    "name": "AsiaPac Manufacturing Ltd",
+    "asset_type": "Equity",
+    "sector": "Industrials",
+    "geography": "Asia Pacific",
+    "weight_pct": 14,
+    "as_of_date": "2026-08-06"
+  },
+  {
+    "fund_ticker": "EMGEQ",
+    "constituent_ticker": "ASIP",
+    "name": "AsiaPac Innovations Ltd",
+    "asset_type": "Equity",
+    "sector": "Technology",
+    "geography": "Asia Pacific",
+    "weight_pct": 12,
+    "as_of_date": "2026-08-06"
+  },
+  {
+    "fund_ticker": "EMGEQ",
+    "constituent_ticker": "CASHNOK",
+    "name": "Cash (NOK)",
+    "asset_type": "Cash",
+    "sector": "Cash",
+    "geography": "Norway",
+    "weight_pct": 10,
+    "as_of_date": "2026-08-06"
+  },
+  {
+    "fund_ticker": "GRNEF",
+    "constituent_ticker": "DANM",
+    "name": "Danmark Wind Partners",
+    "asset_type": "Equity",
+    "sector": "Utilities",
+    "geography": "Denmark",
+    "weight_pct": 26,
+    "as_of_date": "2026-08-06"
+  },
+  {
+    "fund_ticker": "GRNEF",
+    "constituent_ticker": "SVEA",
+    "name": "Svea Green Materials",
+    "asset_type": "Equity",
+    "sector": "Materials",
+    "geography": "Sweden",
+    "weight_pct": 18,
+    "as_of_date": "2026-08-06"
+  },
+  {
+    "fund_ticker": "GRNEF",
+    "constituent_ticker": "USEN",
+    "name": "US Energy Partners",
+    "asset_type": "Equity",
+    "sector": "Energy",
+    "geography": "United States",
+    "weight_pct": 12,
+    "as_of_date": "2026-08-06"
+  },
+  {
+    "fund_ticker": "GRNEF",
+    "constituent_ticker": "JPIN",
+    "name": "Nippon Industrial Co.",
+    "asset_type": "Equity",
+    "sector": "Industrials",
+    "geography": "Asia Pacific",
+    "weight_pct": 10,
+    "as_of_date": "2026-08-06"
+  },
+  {
+    "fund_ticker": "GRNEF",
+    "constituent_ticker": "BRMN",
+    "name": "Brasil Mining SA",
+    "asset_type": "Equity",
+    "sector": "Materials",
+    "geography": "Emerging Markets",
+    "weight_pct": 10,
+    "as_of_date": "2026-08-06"
+  },
+  {
+    "fund_ticker": "GRNEF",
+    "constituent_ticker": "EURX",
+    "name": "EuroSpan Logistics SE",
+    "asset_type": "Equity",
+    "sector": "Industrials",
+    "geography": "Europe",
+    "weight_pct": 9,
+    "as_of_date": "2026-08-06"
+  },
+  {
+    "fund_ticker": "GRNEF",
+    "constituent_ticker": "NRSK",
+    "name": "Norsk Fjord Energy AS",
+    "asset_type": "Equity",
+    "sector": "Energy",
+    "geography": "Norway",
+    "weight_pct": 8,
+    "as_of_date": "2026-08-06"
+  },
+  {
+    "fund_ticker": "GRNEF",
+    "constituent_ticker": "CASHNOK",
+    "name": "Cash (NOK)",
+    "asset_type": "Cash",
+    "sector": "Cash",
+    "geography": "Norway",
+    "weight_pct": 7,
+    "as_of_date": "2026-08-06"
+  },
+  {
+    "fund_ticker": "MFBAL",
+    "constituent_ticker": "AMSW",
+    "name": "AmeriSoft Platforms Inc.",
+    "asset_type": "Equity",
+    "sector": "Technology",
+    "geography": "United States",
+    "weight_pct": 6,
+    "as_of_date": "2026-08-06"
+  },
+  {
+    "fund_ticker": "MFBAL",
+    "constituent_ticker": "USTK",
+    "name": "US TechCore Inc.",
+    "asset_type": "Equity",
+    "sector": "Technology",
+    "geography": "United States",
+    "weight_pct": 5,
+    "as_of_date": "2026-08-06"
+  },
+  {
+    "fund_ticker": "MFBAL",
+    "constituent_ticker": "NCLD",
+    "name": "NorthCloud Data Inc.",
+    "asset_type": "Equity",
+    "sector": "Technology",
+    "geography": "United States",
+    "weight_pct": 3,
+    "as_of_date": "2026-08-06"
+  },
+  {
+    "fund_ticker": "MFBAL",
+    "constituent_ticker": "PSEM",
+    "name": "Pacific Semiconductor Corp",
+    "asset_type": "Equity",
+    "sector": "Technology",
+    "geography": "Asia Pacific",
+    "weight_pct": 3,
+    "as_of_date": "2026-08-06"
+  },
+  {
+    "fund_ticker": "MFBAL",
+    "constituent_ticker": "USHL",
+    "name": "US HealthLine Corp",
+    "asset_type": "Equity",
+    "sector": "Healthcare",
+    "geography": "United States",
+    "weight_pct": 4,
+    "as_of_date": "2026-08-06"
+  },
+  {
+    "fund_ticker": "MFBAL",
+    "constituent_ticker": "USFN",
+    "name": "US Federal Financial Corp",
+    "asset_type": "Equity",
+    "sector": "Financials",
+    "geography": "United States",
+    "weight_pct": 4,
+    "as_of_date": "2026-08-06"
+  },
+  {
+    "fund_ticker": "MFBAL",
+    "constituent_ticker": "USCS",
+    "name": "US Consumer Brands Corp",
+    "asset_type": "Equity",
+    "sector": "Consumer Discretionary",
+    "geography": "United States",
+    "weight_pct": 4,
+    "as_of_date": "2026-08-06"
+  },
+  {
+    "fund_ticker": "MFBAL",
+    "constituent_ticker": "EUPH",
+    "name": "EuroPharma AG",
+    "asset_type": "Equity",
+    "sector": "Healthcare",
+    "geography": "Europe",
+    "weight_pct": 4,
+    "as_of_date": "2026-08-06"
+  },
+  {
+    "fund_ticker": "MFBAL",
+    "constituent_ticker": "EUBK",
+    "name": "EuroBank Group",
+    "asset_type": "Equity",
+    "sector": "Financials",
+    "geography": "Europe",
+    "weight_pct": 3,
+    "as_of_date": "2026-08-06"
+  },
+  {
+    "fund_ticker": "MFBAL",
+    "constituent_ticker": "NRSK",
+    "name": "Norsk Fjord Energy AS",
+    "asset_type": "Equity",
+    "sector": "Energy",
+    "geography": "Norway",
+    "weight_pct": 4,
+    "as_of_date": "2026-08-06"
+  },
+  {
+    "fund_ticker": "MFBAL",
+    "constituent_ticker": "NRDX",
+    "name": "NordicRx Pharma",
+    "asset_type": "Equity",
+    "sector": "Healthcare",
+    "geography": "Nordics",
+    "weight_pct": 4,
+    "as_of_date": "2026-08-06"
+  },
+  {
+    "fund_ticker": "MFBAL",
+    "constituent_ticker": "VIKB",
+    "name": "Viking Bank Group",
+    "asset_type": "Equity",
+    "sector": "Financials",
+    "geography": "Nordics",
+    "weight_pct": 3,
+    "as_of_date": "2026-08-06"
+  },
+  {
+    "fund_ticker": "MFBAL",
+    "constituent_ticker": "JPIN",
+    "name": "Nippon Industrial Co.",
+    "asset_type": "Equity",
+    "sector": "Industrials",
+    "geography": "Asia Pacific",
+    "weight_pct": 3,
+    "as_of_date": "2026-08-06"
+  },
+  {
+    "fund_ticker": "MFBAL",
+    "constituent_ticker": "GOVNO",
+    "name": "Norway Government Bond 10Y (Fictional)",
+    "asset_type": "Bond",
+    "sector": "Government Bonds",
+    "geography": "Norway",
+    "weight_pct": 15,
+    "as_of_date": "2026-08-06"
+  },
+  {
+    "fund_ticker": "MFBAL",
+    "constituent_ticker": "GOVEU",
+    "name": "Euro Government Bond Index (Fictional)",
+    "asset_type": "Bond",
+    "sector": "Government Bonds",
+    "geography": "Europe",
+    "weight_pct": 10,
+    "as_of_date": "2026-08-06"
+  },
+  {
+    "fund_ticker": "MFBAL",
+    "constituent_ticker": "CBIND",
+    "name": "Nordic Industrial Bond 2029 (Fictional)",
+    "asset_type": "Bond",
+    "sector": "Corporate Bonds",
+    "geography": "Nordics",
+    "weight_pct": 8,
+    "as_of_date": "2026-08-06"
+  },
+  {
+    "fund_ticker": "MFBAL",
+    "constituent_ticker": "CBBNK",
+    "name": "Nordic Bank Senior Bond 2028 (Fictional)",
+    "asset_type": "Bond",
+    "sector": "Corporate Bonds",
+    "geography": "Nordics",
+    "weight_pct": 7,
+    "as_of_date": "2026-08-06"
+  },
+  {
+    "fund_ticker": "MFBAL",
+    "constituent_ticker": "CASHNOK",
+    "name": "Cash (NOK)",
+    "asset_type": "Cash",
+    "sector": "Cash",
+    "geography": "Norway",
+    "weight_pct": 10,
+    "as_of_date": "2026-08-06"
+  },
+  {
+    "fund_ticker": "MFCON",
+    "constituent_ticker": "USHL",
+    "name": "US HealthLine Corp",
+    "asset_type": "Equity",
+    "sector": "Healthcare",
+    "geography": "United States",
+    "weight_pct": 4,
+    "as_of_date": "2026-08-06"
+  },
+  {
+    "fund_ticker": "MFCON",
+    "constituent_ticker": "EUPH",
+    "name": "EuroPharma AG",
+    "asset_type": "Equity",
+    "sector": "Healthcare",
+    "geography": "Europe",
+    "weight_pct": 4,
+    "as_of_date": "2026-08-06"
+  },
+  {
+    "fund_ticker": "MFCON",
+    "constituent_ticker": "NRDX",
+    "name": "NordicRx Pharma",
+    "asset_type": "Equity",
+    "sector": "Healthcare",
+    "geography": "Nordics",
+    "weight_pct": 4,
+    "as_of_date": "2026-08-06"
+  },
+  {
+    "fund_ticker": "MFCON",
+    "constituent_ticker": "VIKB",
+    "name": "Viking Bank Group",
+    "asset_type": "Equity",
+    "sector": "Financials",
+    "geography": "Nordics",
+    "weight_pct": 3,
+    "as_of_date": "2026-08-06"
+  },
+  {
+    "fund_ticker": "MFCON",
+    "constituent_ticker": "NRSK",
+    "name": "Norsk Fjord Energy AS",
+    "asset_type": "Equity",
+    "sector": "Energy",
+    "geography": "Norway",
+    "weight_pct": 3,
+    "as_of_date": "2026-08-06"
+  },
+  {
+    "fund_ticker": "MFCON",
+    "constituent_ticker": "USFN",
+    "name": "US Federal Financial Corp",
+    "asset_type": "Equity",
+    "sector": "Financials",
+    "geography": "United States",
+    "weight_pct": 3,
+    "as_of_date": "2026-08-06"
+  },
+  {
+    "fund_ticker": "MFCON",
+    "constituent_ticker": "DANM",
+    "name": "Danmark Wind Partners",
+    "asset_type": "Equity",
+    "sector": "Utilities",
+    "geography": "Denmark",
+    "weight_pct": 2,
+    "as_of_date": "2026-08-06"
+  },
+  {
+    "fund_ticker": "MFCON",
+    "constituent_ticker": "GOVNO",
+    "name": "Norway Government Bond 10Y (Fictional)",
+    "asset_type": "Bond",
+    "sector": "Government Bonds",
+    "geography": "Norway",
+    "weight_pct": 28,
+    "as_of_date": "2026-08-06"
+  },
+  {
+    "fund_ticker": "MFCON",
+    "constituent_ticker": "GOVEU",
+    "name": "Euro Government Bond Index (Fictional)",
+    "asset_type": "Bond",
+    "sector": "Government Bonds",
+    "geography": "Europe",
+    "weight_pct": 22,
+    "as_of_date": "2026-08-06"
+  },
+  {
+    "fund_ticker": "MFCON",
+    "constituent_ticker": "CBIND",
+    "name": "Nordic Industrial Bond 2029 (Fictional)",
+    "asset_type": "Bond",
+    "sector": "Corporate Bonds",
+    "geography": "Nordics",
+    "weight_pct": 10,
+    "as_of_date": "2026-08-06"
+  },
+  {
+    "fund_ticker": "MFCON",
+    "constituent_ticker": "CBBNK",
+    "name": "Nordic Bank Senior Bond 2028 (Fictional)",
+    "asset_type": "Bond",
+    "sector": "Corporate Bonds",
+    "geography": "Nordics",
+    "weight_pct": 10,
+    "as_of_date": "2026-08-06"
+  },
+  {
+    "fund_ticker": "MFCON",
+    "constituent_ticker": "CASHNOK",
+    "name": "Cash (NOK)",
+    "asset_type": "Cash",
+    "sector": "Cash",
+    "geography": "Norway",
+    "weight_pct": 7,
+    "as_of_date": "2026-08-06"
+  },
+  {
+    "fund_ticker": "MFPEN",
+    "constituent_ticker": "NRSK",
+    "name": "Norsk Fjord Energy AS",
+    "asset_type": "Equity",
+    "sector": "Energy",
+    "geography": "Norway",
+    "weight_pct": 10,
+    "as_of_date": "2026-08-06"
+  },
+  {
+    "fund_ticker": "MFPEN",
+    "constituent_ticker": "NRDX",
+    "name": "NordicRx Pharma",
+    "asset_type": "Equity",
+    "sector": "Healthcare",
+    "geography": "Nordics",
+    "weight_pct": 10,
+    "as_of_date": "2026-08-06"
+  },
+  {
+    "fund_ticker": "MFPEN",
+    "constituent_ticker": "VIKB",
+    "name": "Viking Bank Group",
+    "asset_type": "Equity",
+    "sector": "Financials",
+    "geography": "Nordics",
+    "weight_pct": 9,
+    "as_of_date": "2026-08-06"
+  },
+  {
+    "fund_ticker": "MFPEN",
+    "constituent_ticker": "BRGN",
+    "name": "Bergen Maritime Holdings",
+    "asset_type": "Equity",
+    "sector": "Industrials",
+    "geography": "Norway",
+    "weight_pct": 8,
+    "as_of_date": "2026-08-06"
+  },
+  {
+    "fund_ticker": "MFPEN",
+    "constituent_ticker": "OSLC",
+    "name": "Oslo Cloud Systems ASA",
+    "asset_type": "Equity",
+    "sector": "Technology",
+    "geography": "Norway",
+    "weight_pct": 7,
+    "as_of_date": "2026-08-06"
+  },
+  {
+    "fund_ticker": "MFPEN",
+    "constituent_ticker": "SVEA",
+    "name": "Svea Green Materials",
+    "asset_type": "Equity",
+    "sector": "Materials",
+    "geography": "Sweden",
+    "weight_pct": 6,
+    "as_of_date": "2026-08-06"
+  },
+  {
+    "fund_ticker": "MFPEN",
+    "constituent_ticker": "DANM",
+    "name": "Danmark Wind Partners",
+    "asset_type": "Equity",
+    "sector": "Utilities",
+    "geography": "Denmark",
+    "weight_pct": 6,
+    "as_of_date": "2026-08-06"
+  },
+  {
+    "fund_ticker": "MFPEN",
+    "constituent_ticker": "FJEL",
+    "name": "Fjellblå Seafood ASA",
+    "asset_type": "Equity",
+    "sector": "Consumer Staples",
+    "geography": "Norway",
+    "weight_pct": 5,
+    "as_of_date": "2026-08-06"
+  },
+  {
+    "fund_ticker": "MFPEN",
+    "constituent_ticker": "HELS",
+    "name": "Helsinki Circuit Technologies",
+    "asset_type": "Equity",
+    "sector": "Technology",
+    "geography": "Finland",
+    "weight_pct": 4,
+    "as_of_date": "2026-08-06"
+  },
+  {
+    "fund_ticker": "MFPEN",
+    "constituent_ticker": "AMSW",
+    "name": "AmeriSoft Platforms Inc.",
+    "asset_type": "Equity",
+    "sector": "Technology",
+    "geography": "United States",
+    "weight_pct": 4,
+    "as_of_date": "2026-08-06"
+  },
+  {
+    "fund_ticker": "MFPEN",
+    "constituent_ticker": "USTK",
+    "name": "US TechCore Inc.",
+    "asset_type": "Equity",
+    "sector": "Technology",
+    "geography": "United States",
+    "weight_pct": 3,
+    "as_of_date": "2026-08-06"
+  },
+  {
+    "fund_ticker": "MFPEN",
+    "constituent_ticker": "EUPH",
+    "name": "EuroPharma AG",
+    "asset_type": "Equity",
+    "sector": "Healthcare",
+    "geography": "Europe",
+    "weight_pct": 3,
+    "as_of_date": "2026-08-06"
+  },
+  {
+    "fund_ticker": "MFPEN",
+    "constituent_ticker": "GOVNO",
+    "name": "Norway Government Bond 10Y (Fictional)",
+    "asset_type": "Bond",
+    "sector": "Government Bonds",
+    "geography": "Norway",
+    "weight_pct": 15,
+    "as_of_date": "2026-08-06"
+  },
+  {
+    "fund_ticker": "MFPEN",
+    "constituent_ticker": "CBIND",
+    "name": "Nordic Industrial Bond 2029 (Fictional)",
+    "asset_type": "Bond",
+    "sector": "Corporate Bonds",
+    "geography": "Nordics",
+    "weight_pct": 5,
+    "as_of_date": "2026-08-06"
+  },
+  {
+    "fund_ticker": "MFPEN",
+    "constituent_ticker": "CASHNOK",
+    "name": "Cash (NOK)",
+    "asset_type": "Cash",
+    "sector": "Cash",
+    "geography": "Norway",
+    "weight_pct": 5,
+    "as_of_date": "2026-08-06"
+  },
+  {
+    "fund_ticker": "CORPB",
+    "constituent_ticker": "CBIND",
+    "name": "Nordic Industrial Bond 2029 (Fictional)",
+    "asset_type": "Bond",
+    "sector": "Corporate Bonds",
+    "geography": "Nordics",
+    "weight_pct": 30,
+    "as_of_date": "2026-08-06"
+  },
+  {
+    "fund_ticker": "CORPB",
+    "constituent_ticker": "CBBNK",
+    "name": "Nordic Bank Senior Bond 2028 (Fictional)",
+    "asset_type": "Bond",
+    "sector": "Corporate Bonds",
+    "geography": "Nordics",
+    "weight_pct": 28,
+    "as_of_date": "2026-08-06"
+  },
+  {
+    "fund_ticker": "CORPB",
+    "constituent_ticker": "CBENR",
+    "name": "Nordic Energy Bond 2030 (Fictional)",
+    "asset_type": "Bond",
+    "sector": "Corporate Bonds",
+    "geography": "Nordics",
+    "weight_pct": 22,
+    "as_of_date": "2026-08-06"
+  },
+  {
+    "fund_ticker": "CORPB",
+    "constituent_ticker": "CBSHP",
+    "name": "Nordic Shipping Bond 2027 (Fictional)",
+    "asset_type": "Bond",
+    "sector": "Corporate Bonds",
+    "geography": "Norway",
+    "weight_pct": 15,
+    "as_of_date": "2026-08-06"
+  },
+  {
+    "fund_ticker": "CORPB",
+    "constituent_ticker": "CASHNOK",
+    "name": "Cash (NOK)",
+    "asset_type": "Cash",
+    "sector": "Cash",
+    "geography": "Norway",
+    "weight_pct": 5,
+    "as_of_date": "2026-08-06"
+  }
+]

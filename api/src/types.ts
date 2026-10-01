@@ -66,3 +66,14 @@ export interface Instrument {
   current_price: number
   currency: string
 }
+
+export interface FundHolding {
+  fund_ticker: string
+  constituent_ticker: string
+  name: string
+  asset_type: Investment['asset_type']
+  sector: string
+  geography: string
+  weight_pct: number
+  as_of_date: string
+}

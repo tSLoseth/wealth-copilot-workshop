@@ -4,6 +4,7 @@ import express from 'express'
 import cors from 'cors'
 import swaggerUi from 'swagger-ui-express'
 import { customersRouter } from './routes/customers.js'
+import { reportsRouter } from './routes/reports.js'
 import { getAllHoldings, getAllInstruments } from './data.js'
 import { loadOpenApiSpec } from './docs.js'
 
@@ -23,6 +24,7 @@ export function createApp() {
   })
   app.use('/docs', swaggerUi.serve, swaggerUi.setup(openApiSpec))
 
+  app.use(reportsRouter)
   app.use('/customers', customersRouter)
 
   // Top-level discovery endpoints for workshop participants.

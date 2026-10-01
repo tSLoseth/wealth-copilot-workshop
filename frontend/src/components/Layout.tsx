@@ -46,6 +46,8 @@ export default function Layout() {
           <NavLink to="/portfolio">Portfolio</NavLink>
           <NavLink to="/insights">Insights</NavLink>
           <NavLink to="/copilot">Wealth Copilot</NavLink>
+          <NavLink to="/rapporter">Rapporter</NavLink>
+          <NavLink to="/admin">Rådgiver</NavLink>
         </nav>
         <CustomerSelector />
       </header>
