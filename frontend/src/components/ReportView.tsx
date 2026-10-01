@@ -2,6 +2,8 @@ import { useState, type ReactNode } from 'react'
 import { Bar, BarChart, CartesianGrid, LabelList, Legend, ResponsiveContainer, Tooltip, XAxis, YAxis } from 'recharts'
 import { fetchFundHoldings, type FundHoldingsResponse } from '../api/client'
 import type { BreakdownRow, DataQualityNote, MetricResult, ResolvedBlock, ResolvedReport } from '../api/reportTypes'
+import { useDrillDown } from '../context/DrillDownContext'
+import { useViewSettings } from '../context/ViewSettingsContext'
 import { formatDateNo } from '../utils/format'
 
 const VALUE_COLOR = '#0000A0'
@@ -193,16 +195,37 @@ function FundLookup({ tickers }: { tickers: string[] }) {
   )
 }
 
+function DrillHint({ rows }: { rows: BreakdownRow[] }) {
+  const { openDrill } = useDrillDown()
+  const drillable = rows.filter((row) => row.drill)
+  if (drillable.length === 0) return null
+  return (
+    <div className="drill-hint">
+      <span className="click-hint">Klikk for detaljer:</span>
+      {drillable.map((row, index) => (
+        <button key={`${row.label}-${index}`} type="button" className="chip chip--button chip--small" onClick={() => openDrill(row.drill!)}>
+          {row.label}
+        </button>
+      ))}
+    </div>
+  )
+}
+
 function BarBlock({ metric }: { metric: MetricResult }) {
+  const { openDrill } = useDrillDown()
   const rows = (metric.breakdown ?? []).slice(0, 10)
   if (rows.length === 0) return <p className="empty-state">Ingen data å vise.</p>
+  const hasDrill = rows.some((row) => row.drill)
+  const onBarClick = (item: { payload?: BreakdownRow }) => {
+    if (item?.payload?.drill) openDrill(item.payload.drill)
+  }
   const hasSecondary = rows.some((row) => row.secondary !== undefined)
   const valueLabel = metric.value_label ?? 'Verdi'
   const secondaryLabel = metric.secondary_label ?? 'Sammenligning'
   const height = rows.length * (hasSecondary ? 52 : 36) + 70
 
   return (
-    <div className="report-chart">
+    <div className={`report-chart${hasDrill ? ' report-chart--drill' : ''}`}>
       <ResponsiveContainer width="100%" height={height}>
         <BarChart data={rows} layout="vertical" margin={{ top: 4, right: 64, bottom: 4, left: 8 }} barGap={2}>
           <CartesianGrid horizontal={false} stroke="#e2e8f0" />
@@ -216,21 +239,37 @@ function BarBlock({ metric }: { metric: MetricResult }) {
             }}
           />
           <Legend wrapperStyle={{ fontSize: 13 }} />
-          <Bar dataKey="value" name={valueLabel} fill={VALUE_COLOR} radius={[0, 4, 4, 0]}>
+          <Bar
+            dataKey="value"
+            name={valueLabel}
+            fill={VALUE_COLOR}
+            radius={[0, 4, 4, 0]}
+            cursor={hasDrill ? 'pointer' : undefined}
+            onClick={onBarClick}
+          >
             <LabelList dataKey="display" position="right" style={{ fontSize: 11, fill: '#334155' }} />
           </Bar>
           {hasSecondary && (
-            <Bar dataKey="secondary" name={secondaryLabel} fill={SECONDARY_COLOR} radius={[0, 4, 4, 0]}>
+            <Bar
+              dataKey="secondary"
+              name={secondaryLabel}
+              fill={SECONDARY_COLOR}
+              radius={[0, 4, 4, 0]}
+              cursor={hasDrill ? 'pointer' : undefined}
+              onClick={onBarClick}
+            >
               <LabelList dataKey="secondary_display" position="right" style={{ fontSize: 11, fill: '#334155' }} />
             </Bar>
           )}
         </BarChart>
       </ResponsiveContainer>
+      <DrillHint rows={rows} />
     </div>
   )
 }
 
 function TableBlock({ metric }: { metric: MetricResult }) {
+  const { openDrill } = useDrillDown()
   const rows = metric.breakdown ?? []
   if (rows.length === 0) return <p className="empty-state">Ingen data å vise.</p>
   const hasSecondary = rows.some((row) => row.secondary_display !== undefined)
@@ -251,8 +290,27 @@ function TableBlock({ metric }: { metric: MetricResult }) {
         </thead>
         <tbody>
           {rows.map((row, index) => (
-            <tr key={`${row.label}-${index}`}>
-              <td className="report-table__label">{row.label}</td>
+            <tr
+              key={`${row.label}-${index}`}
+              className={row.drill ? 'is-clickable' : undefined}
+              onClick={row.drill ? () => openDrill(row.drill!) : undefined}
+            >
+              <td className="report-table__label">
+                {row.drill ? (
+                  <button
+                    type="button"
+                    className="row-link"
+                    onClick={(event) => {
+                      event.stopPropagation()
+                      openDrill(row.drill!)
+                    }}
+                  >
+                    {row.label}
+                  </button>
+                ) : (
+                  row.label
+                )}
+              </td>
               <td className="num">{row.display}</td>
               {hasSecondary && <td className="num">{row.secondary_display ?? ''}</td>}
               {metaKeys.map((key) => (
@@ -262,11 +320,13 @@ function TableBlock({ metric }: { metric: MetricResult }) {
           ))}
         </tbody>
       </table>
+      {rows.some((row) => row.drill) && <p className="click-hint">Klikk på en rad for detaljer</p>}
     </div>
   )
 }
 
 function ScenarioBlock({ metric, caption }: { metric: MetricResult; caption?: string }) {
+  const { openDrill } = useDrillDown()
   const losses = (metric.breakdown ?? []).slice(0, 5)
   return (
     <div className="scenario">
@@ -281,7 +341,13 @@ function ScenarioBlock({ metric, caption }: { metric: MetricResult; caption?: st
           <ol className="scenario__losses">
             {losses.map((row, index) => (
               <li key={`${row.label}-${index}`}>
-                <span>{row.label}</span>
+                {row.drill ? (
+                  <button type="button" className="row-link" onClick={() => openDrill(row.drill!)}>
+                    {row.label}
+                  </button>
+                ) : (
+                  <span>{row.label}</span>
+                )}
                 <span className="negative">{row.display}</span>
               </li>
             ))}
@@ -292,14 +358,33 @@ function ScenarioBlock({ metric, caption }: { metric: MetricResult; caption?: st
   )
 }
 
+type BandSegment = 'below' | 'within' | 'above'
+
+// Places a value in the profile band, using the band limits (meta.fra/til) from the breakdown.
+function bandSegment(metric: MetricResult, value: number | null): BandSegment | null {
+  if (value === null) return null
+  const band = metric.breakdown?.find((row) => typeof row.meta?.fra === 'number' && typeof row.meta?.til === 'number')
+  if (!band?.meta) return null
+  const min = band.meta.fra as number
+  const max = band.meta.til as number
+  return value < min ? 'below' : value > max ? 'above' : 'within'
+}
+
 function StatusBlock({ metric }: { metric: MetricResult }) {
-  const segments: { key: 'below' | 'within' | 'above'; label: string }[] = [
+  const { showBenchmark } = useViewSettings()
+  const benchmark = showBenchmark ? metric.benchmark : undefined
+  const benchmarkSegment = benchmark ? bandSegment(metric, benchmark.value) : null
+  const segments: { key: BandSegment; label: string }[] = [
     { key: 'below', label: 'Under profilen' },
     { key: 'within', label: 'Innenfor profilen' },
     { key: 'above', label: 'Over profilen' },
   ]
   return (
-    <div className="status-band" role="img" aria-label={`${metric.title}: ${metric.display}, ${STATUS_LABELS[metric.status ?? 'unknown']}`}>
+    <div
+      className={`status-band${benchmarkSegment ? ' status-band--with-benchmark' : ''}`}
+      role="img"
+      aria-label={`${metric.title}: ${metric.display}, ${STATUS_LABELS[metric.status ?? 'unknown']}${benchmark ? `. OSEBX: ${benchmark.display}` : ''}`}
+    >
       <div className="status-band__track">
         {segments.map((segment) => (
           <div
@@ -308,13 +393,27 @@ function StatusBlock({ metric }: { metric: MetricResult }) {
           >
             {metric.status === segment.key && <span className="status-band__marker">{metric.display}</span>}
             <span className="status-band__label">{segment.label}</span>
+            {benchmarkSegment === segment.key && (
+              <span className="status-band__marker status-band__marker--benchmark">OSEBX: {benchmark!.display}</span>
+            )}
           </div>
         ))}
       </div>
       {(!metric.status || metric.status === 'unknown') && (
         <p className="muted-small">Vi kunne ikke avgjøre om dette passer profilen din ({metric.display}).</p>
       )}
+      {benchmark && !benchmarkSegment && <p className="benchmark-note">OSEBX: {benchmark.display}</p>}
     </div>
+  )
+}
+
+function BenchmarkNote({ metric }: { metric: MetricResult }) {
+  const { showBenchmark } = useViewSettings()
+  if (!showBenchmark || !metric.benchmark) return null
+  return (
+    <p className="benchmark-note" title={metric.benchmark.label}>
+      OSEBX: {metric.benchmark.display}
+    </p>
   )
 }
 
@@ -325,6 +424,7 @@ function MetricBlock({ block, metric }: { block: ResolvedBlock; metric: MetricRe
       body = (
         <div className="kpi">
           <p className="kpi__value">{metric.display}</p>
+          <BenchmarkNote metric={metric} />
           <StatusBadge status={metric.status} />
         </div>
       )
@@ -353,9 +453,17 @@ function MetricBlock({ block, metric }: { block: ResolvedBlock; metric: MetricRe
     <section className={`report-block report-block--${block.type}`}>
       <header className="report-block__header">
         <h4>{metric.title}</h4>
-        {block.type !== 'kpi' && block.type !== 'status' && <StatusBadge status={metric.status} />}
+        <span className="report-block__badges">
+          {metric.period && (
+            <span className="chip chip--muted chip--small" title={`${formatDateNo(metric.period.start)} – ${formatDateNo(metric.period.end)}`}>
+              {metric.period.label}
+            </span>
+          )}
+          {block.type !== 'kpi' && block.type !== 'status' && <StatusBadge status={metric.status} />}
+        </span>
       </header>
       {body}
+      {block.type !== 'kpi' && block.type !== 'status' && <BenchmarkNote metric={metric} />}
       {showCaption && <p className="report-block__caption">{block.caption}</p>}
       <DataQualityList notes={warnings} />
       <FundLookup tickers={fundTickers} />
@@ -423,7 +531,7 @@ const SOURCE_LABELS: Record<ResolvedReport['source'], string> = {
   saved: 'Lagret rapport',
 }
 
-export default function ReportView({ report, actions }: { report: ResolvedReport; actions?: ReactNode }) {
+export default function ReportView({ report, actions, controls }: { report: ResolvedReport; actions?: ReactNode; controls?: ReactNode }) {
   return (
     <article className="report">
       <header className="report__header">
@@ -431,7 +539,12 @@ export default function ReportView({ report, actions }: { report: ResolvedReport
           <p className="eyebrow">{SOURCE_LABELS[report.source]}</p>
           <h2>{report.title}</h2>
         </div>
-        {actions && <div className="report__actions">{actions}</div>}
+        {(controls || actions) && (
+          <div className="report__controls">
+            {controls}
+            {actions && <div className="report__actions">{actions}</div>}
+          </div>
+        )}
       </header>
       {report.intro && <p className="report__intro">{report.intro}</p>}
       <div className="report__blocks">

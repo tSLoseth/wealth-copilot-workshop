@@ -1,17 +1,27 @@
 import { useEffect, useState } from 'react'
+import { fetchAdminEvents } from '../api/adminClient'
 import { ApiError, fetchCustomerActivity, fetchInteractions, updateInteraction } from '../api/client'
-import type { AiInteraction, CustomerActivity } from '../api/reportTypes'
+import type { AiInteraction, CustomerActivity, CustomerEvent } from '../api/reportTypes'
+import CustomerSummary from '../components/admin/CustomerSummary'
+import EventCard from '../components/admin/EventCard'
+import FlagChip from '../components/admin/FlagChip'
+import InteractionCard, { type InteractionPatch } from '../components/admin/InteractionCard'
 import { formatDateNo } from '../utils/format'
 
 const TOKEN_KEY = 'wc.adminToken'
-const HIGHLIGHTED_FLAGS = new Set(['ønsker_råd', 'bekymring'])
 
-const STATUS_LABELS: Record<AiInteraction['status'], string> = {
-  ok: 'Rapport laget',
-  refused: 'Avvist',
-  fallback: 'Standardrapport brukt',
-  error: 'Feil',
-}
+type Filter = 'all' | 'ai' | 'reports' | 'chat'
+
+const FILTERS: { key: Filter; label: string; empty: string }[] = [
+  { key: 'all', label: 'Alt', empty: 'Ingen aktivitet fra denne kunden ennå.' },
+  { key: 'ai', label: 'AI-rapporter', empty: 'Kunden har ikke spurt AI-en om noen rapporter.' },
+  { key: 'reports', label: 'Rapportvisninger', empty: 'Kunden har ikke åpnet noen rapporter.' },
+  { key: 'chat', label: 'Chat', empty: 'Kunden har ikke stilt spørsmål i Wealth Copilot-chatten.' },
+]
+
+type TimelineEntry =
+  | { kind: 'ai'; at: string; interaction: AiInteraction }
+  | { kind: 'event'; at: string; event: CustomerEvent }
 
 function readToken(): string | null {
   try {
@@ -30,17 +40,26 @@ function writeToken(token: string | null) {
   }
 }
 
-function flagLabel(flag: string): string {
-  return flag.replace(/_/g, ' ')
+function buildTimeline(interactions: AiInteraction[], events: CustomerEvent[], filter: Filter): TimelineEntry[] {
+  const entries: TimelineEntry[] = []
+  if (filter === 'all' || filter === 'ai') {
+    for (const interaction of interactions) entries.push({ kind: 'ai', at: interaction.created_at, interaction })
+  }
+  for (const event of events) {
+    const include =
+      filter === 'all' ||
+      (filter === 'reports' && event.event_type === 'report_view') ||
+      (filter === 'chat' && event.event_type === 'copilot_chat')
+    if (include) entries.push({ kind: 'event', at: event.created_at, event })
+  }
+  return entries.sort((a, b) => Date.parse(b.at) - Date.parse(a.at))
 }
 
-function FlagChip({ flag, count }: { flag: string; count?: number }) {
-  return (
-    <span className={`chip${HIGHLIGHTED_FLAGS.has(flag) ? ' chip--alert' : ' chip--muted'}`}>
-      {flagLabel(flag)}
-      {count !== undefined && count > 1 && ` ×${count}`}
-    </span>
-  )
+function filterCount(filter: Filter, interactions: AiInteraction[], events: CustomerEvent[]): number {
+  if (filter === 'ai') return interactions.length
+  if (filter === 'reports') return events.filter((event) => event.event_type === 'report_view').length
+  if (filter === 'chat') return events.filter((event) => event.event_type === 'copilot_chat').length
+  return interactions.length + events.length
 }
 
 function TokenForm({ onSubmit, error }: { onSubmit: (token: string) => void; error: string | null }) {
@@ -65,101 +84,63 @@ function TokenForm({ onSubmit, error }: { onSubmit: (token: string) => void; err
   )
 }
 
-function InteractionCard({
-  interaction,
-  onPatch,
+function CustomerButton({
+  customer,
+  active,
+  onSelect,
 }: {
-  interaction: AiInteraction
-  onPatch: (id: string, patch: { reviewed?: boolean; advisor_note?: string }) => Promise<boolean>
+  customer: CustomerActivity
+  active: boolean
+  onSelect: () => void
 }) {
-  const [note, setNote] = useState(interaction.advisor_note ?? '')
-  const [noteState, setNoteState] = useState<'idle' | 'saving' | 'saved' | 'error'>('idle')
-  const reviewed = interaction.reviewed_at !== null
-
-  async function saveNote() {
-    if (note === (interaction.advisor_note ?? '')) return
-    setNoteState('saving')
-    setNoteState((await onPatch(interaction.id, { advisor_note: note })) ? 'saved' : 'error')
-  }
-
+  const topReports = customer.top_reports ?? []
   return (
-    <li className={`timeline__item${reviewed ? ' is-reviewed' : ''}`}>
-      <div className="timeline__meta">
-        <time dateTime={interaction.created_at}>{formatDateNo(interaction.created_at, true)}</time>
-        <span className={`status-pill status-pill--${interaction.status}`}>{STATUS_LABELS[interaction.status]}</span>
-        {interaction.latency_ms > 0 && <span className="muted-small">{(interaction.latency_ms / 1000).toLocaleString('nb-NO', { maximumFractionDigits: 1 })} s</span>}
-      </div>
-      <p className="timeline__prompt">«{interaction.prompt}»</p>
-      {interaction.report_title && (
-        <p>
-          <strong>Rapport:</strong> {interaction.report_title}
-        </p>
-      )}
-      {interaction.customer_notice && <div className="callout callout--notice">{interaction.customer_notice}</div>}
-      {interaction.summary && <p className="timeline__summary">{interaction.summary}</p>}
-      {(interaction.topics.length > 0 || interaction.flags.length > 0) && (
-        <div className="chip-row">
-          {interaction.flags.map((flag) => (
-            <FlagChip key={flag} flag={flag} />
+    <button type="button" className={`admin-customer${active ? ' is-active' : ''}`} onClick={onSelect}>
+      <span className="admin-customer__top">
+        <span className="admin-customer__name">{customer.customer_name}</span>
+        {customer.unreviewed_count > 0 && (
+          <span className="badge" title="Ikke gjennomgått">
+            {customer.unreviewed_count} nye
+          </span>
+        )}
+      </span>
+      <span className="muted-small">
+        {customer.risk_profile} · sist aktiv {formatDateNo(customer.last_active_at ?? customer.last_asked_at)}
+      </span>
+      <span className="admin-customer__stats">
+        <span>
+          <strong>{customer.question_count}</strong> AI-spørsmål
+        </span>
+        <span>
+          <strong>{customer.report_view_count ?? 0}</strong> rapportvisninger
+        </span>
+        <span>
+          <strong>{customer.copilot_question_count ?? 0}</strong> chat-spørsmål
+        </span>
+      </span>
+      {(customer.flags.length > 0 || customer.topics.length > 0) && (
+        <span className="chip-row">
+          {customer.flags.map((flag) => (
+            <FlagChip key={flag.flag} flag={flag.flag} count={flag.count} />
           ))}
-          {interaction.topics.map((topic) => (
-            <span key={topic} className="chip">
-              {topic}
+          {customer.topics.slice(0, 3).map((topic) => (
+            <span key={topic.topic} className="chip">
+              {topic.topic}
             </span>
           ))}
-        </div>
+        </span>
       )}
-      {interaction.metrics_used.length > 0 && (
-        <p className="muted-small">
-          Beregninger brukt:{' '}
-          {interaction.metrics_used.map((metric) => (
-            <code key={metric} className="inline-code">
-              {metric}
-            </code>
+      {topReports.length > 0 && (
+        <span className="chip-row admin-customer__reports">
+          {topReports.slice(0, 3).map((report) => (
+            <span key={report.title} className="chip chip--muted chip--report">
+              {report.title}
+              {report.count > 1 && ` ×${report.count}`}
+            </span>
           ))}
-        </p>
+        </span>
       )}
-      {(interaction.spec || interaction.tool_trace.length > 0) && (
-        <details className="ai-trace">
-          <summary>Spesifikasjon og sporing</summary>
-          {interaction.tool_trace.length > 0 && (
-            <ol className="ai-trace__steps">
-              {interaction.tool_trace.map((step, index) => (
-                <li key={index}>
-                  <code>{step.tool}</code>
-                  <span>{step.summary}</span>
-                </li>
-              ))}
-            </ol>
-          )}
-          {interaction.spec && <pre className="code-block">{JSON.stringify(interaction.spec, null, 2)}</pre>}
-          {interaction.model && <p className="muted-small">Modell: {interaction.model}</p>}
-        </details>
-      )}
-      <div className="timeline__advisor">
-        <label className="checkbox">
-          <input type="checkbox" checked={reviewed} onChange={(event) => onPatch(interaction.id, { reviewed: event.target.checked })} />
-          {reviewed ? `Gjennomgått ${formatDateNo(interaction.reviewed_at, true)}` : 'Marker som gjennomgått'}
-        </label>
-        <label htmlFor={`note-${interaction.id}`} className="muted-small">
-          Notat fra rådgiver{' '}
-          {noteState === 'saving' && '· lagrer …'}
-          {noteState === 'saved' && '· lagret'}
-          {noteState === 'error' && <span className="negative">· klarte ikke å lagre</span>}
-        </label>
-        <textarea
-          id={`note-${interaction.id}`}
-          rows={2}
-          value={note}
-          placeholder="F.eks. «Ring Jonas og gå gjennom teknologiandelen»"
-          onChange={(event) => {
-            setNote(event.target.value)
-            setNoteState('idle')
-          }}
-          onBlur={saveNote}
-        />
-      </div>
-    </li>
+    </button>
   )
 }
 
@@ -171,6 +152,9 @@ export default function Admin() {
   const [selectedId, setSelectedId] = useState<string | null>(null)
   const [interactions, setInteractions] = useState<AiInteraction[] | null>(null)
   const [interactionsError, setInteractionsError] = useState<string | null>(null)
+  const [events, setEvents] = useState<CustomerEvent[] | null>(null)
+  const [eventsError, setEventsError] = useState<string | null>(null)
+  const [filter, setFilter] = useState<Filter>('all')
 
   function handleError(err: unknown, setMessage: (message: string) => void, fallback: string) {
     if (err instanceof ApiError && err.status === 401) {
@@ -194,6 +178,7 @@ export default function Admin() {
     setActivity(null)
     setSelectedId(null)
     setInteractions(null)
+    setEvents(null)
   }
 
   useEffect(() => {
@@ -217,15 +202,20 @@ export default function Admin() {
     let cancelled = false
     setInteractions(null)
     setInteractionsError(null)
+    setEvents(null)
+    setEventsError(null)
     fetchInteractions(token, selectedId)
       .then((result) => !cancelled && setInteractions(result.interactions))
-      .catch((err) => !cancelled && handleError(err, setInteractionsError, 'Klarte ikke å hente spørsmålene.'))
+      .catch((err) => !cancelled && handleError(err, setInteractionsError, 'Klarte ikke å hente AI-spørsmålene.'))
+    fetchAdminEvents(token, selectedId)
+      .then((result) => !cancelled && setEvents(result.events))
+      .catch((err) => !cancelled && handleError(err, setEventsError, 'Klarte ikke å hente rapportvisninger og chat.'))
     return () => {
       cancelled = true
     }
   }, [token, selectedId])
 
-  async function patch(id: string, change: { reviewed?: boolean; advisor_note?: string }): Promise<boolean> {
+  async function patch(id: string, change: InteractionPatch): Promise<boolean> {
     if (!token) return false
     try {
       const updated = await updateInteraction(token, id, change)
@@ -250,13 +240,20 @@ export default function Admin() {
   }
 
   const selected = activity?.find((customer) => customer.customer_id === selectedId) ?? null
+  const interactionsDone = interactions !== null || interactionsError !== null
+  const eventsDone = events !== null || eventsError !== null
+  const loaded = interactionsDone && eventsDone
+  const loadedInteractions = interactions ?? []
+  const loadedEvents = events ?? []
+  const timeline = loaded ? buildTimeline(loadedInteractions, loadedEvents, filter) : []
+  const activeFilter = FILTERS.find((item) => item.key === filter) ?? FILTERS[0]
 
   return (
     <div className="page">
       <div className="page-heading page-heading--row">
         <div>
           <p className="eyebrow">Rådgiver</p>
-          <h2>Rådgiveroversikt – hva kundene har spurt AI-en om</h2>
+          <h2>Rådgiveroversikt – hva kundene har sett på og spurt om</h2>
         </div>
         {token && (
           <button type="button" className="btn btn--secondary" onClick={logout}>
@@ -272,40 +269,17 @@ export default function Admin() {
           <aside className="admin-customers" aria-label="Kunder">
             {activityError && <p className="error-state">{activityError}</p>}
             {!activity && !activityError && <p className="loading-state">Henter kunder …</p>}
-            {activity && activity.length === 0 && <p className="empty-state">Ingen kunder har spurt AI-en om noe ennå.</p>}
+            {activity && activity.length === 0 && (
+              <p className="empty-state">Ingen kunder har åpnet rapporter eller spurt om noe ennå.</p>
+            )}
             <ul>
               {activity?.map((customer) => (
                 <li key={customer.customer_id}>
-                  <button
-                    type="button"
-                    className={`admin-customer${customer.customer_id === selectedId ? ' is-active' : ''}`}
-                    onClick={() => setSelectedId(customer.customer_id)}
-                  >
-                    <span className="admin-customer__top">
-                      <span className="admin-customer__name">{customer.customer_name}</span>
-                      {customer.unreviewed_count > 0 && (
-                        <span className="badge" title="Ikke gjennomgått">
-                          {customer.unreviewed_count} nye
-                        </span>
-                      )}
-                    </span>
-                    <span className="muted-small">
-                      {customer.risk_profile} · {customer.question_count} spørsmål · sist{' '}
-                      {formatDateNo(customer.last_asked_at)}
-                    </span>
-                    {(customer.flags.length > 0 || customer.topics.length > 0) && (
-                      <span className="chip-row">
-                        {customer.flags.map((flag) => (
-                          <FlagChip key={flag.flag} flag={flag.flag} count={flag.count} />
-                        ))}
-                        {customer.topics.slice(0, 3).map((topic) => (
-                          <span key={topic.topic} className="chip">
-                            {topic.topic}
-                          </span>
-                        ))}
-                      </span>
-                    )}
-                  </button>
+                  <CustomerButton
+                    customer={customer}
+                    active={customer.customer_id === selectedId}
+                    onSelect={() => setSelectedId(customer.customer_id)}
+                  />
                 </li>
               ))}
             </ul>
@@ -320,15 +294,47 @@ export default function Admin() {
                 </p>
               </header>
             )}
+            {selectedId && !loaded && <p className="loading-state">Henter aktivitet …</p>}
             {interactionsError && <p className="error-state">{interactionsError}</p>}
-            {selectedId && !interactions && !interactionsError && <p className="loading-state">Henter spørsmål …</p>}
-            {interactions && interactions.length === 0 && <p className="empty-state">Ingen spørsmål fra denne kunden.</p>}
-            {interactions && interactions.length > 0 && (
-              <ol className="timeline">
-                {interactions.map((interaction) => (
-                  <InteractionCard key={interaction.id} interaction={interaction} onPatch={patch} />
-                ))}
-              </ol>
+            {eventsError && <p className="error-state">{eventsError}</p>}
+
+            {selectedId && loaded && (
+              <>
+                <CustomerSummary
+                  customerName={selected?.customer_name ?? selectedId}
+                  interactions={loadedInteractions}
+                  events={loadedEvents}
+                />
+
+                <div className="admin-filter" role="group" aria-label="Filtrer aktivitet">
+                  {FILTERS.map((item) => (
+                    <button
+                      key={item.key}
+                      type="button"
+                      className={`chip chip--button${filter === item.key ? ' chip--active' : ''}`}
+                      aria-pressed={filter === item.key}
+                      onClick={() => setFilter(item.key)}
+                    >
+                      {item.label}
+                      <span className="admin-filter__count">{filterCount(item.key, loadedInteractions, loadedEvents)}</span>
+                    </button>
+                  ))}
+                </div>
+
+                {timeline.length === 0 ? (
+                  <p className="empty-state">{activeFilter.empty}</p>
+                ) : (
+                  <ol className="timeline">
+                    {timeline.map((entry) =>
+                      entry.kind === 'ai' ? (
+                        <InteractionCard key={`ai-${entry.interaction.id}`} interaction={entry.interaction} onPatch={patch} />
+                      ) : (
+                        <EventCard key={`ev-${entry.event.id}`} event={entry.event} />
+                      ),
+                    )}
+                  </ol>
+                )}
+              </>
             )}
           </section>
         </div>

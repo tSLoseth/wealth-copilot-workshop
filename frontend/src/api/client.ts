@@ -17,8 +17,15 @@ import type {
 import type {
   AiInteraction,
   AiReportResponse,
+  BenchmarkSource,
   CustomerActivity,
+  ExposuresResponse,
+  HistoryPoint,
+  HistoryResponse,
+  InstrumentHistoryResponse,
   MetricDefinition,
+  PeriodStats,
+  RangeKey,
   ReportSpec,
   ReportSummary,
   ResolvedReport,
@@ -46,6 +53,24 @@ async function requestJson<T>(path: string, init?: RequestInit): Promise<T> {
 
 function getJson<T>(path: string): Promise<T> {
   return requestJson<T>(path)
+}
+
+function withQuery(path: string, params: Record<string, string | undefined>): string {
+  const search = new URLSearchParams()
+  for (const [key, value] of Object.entries(params)) if (value !== undefined) search.set(key, value)
+  const query = search.toString()
+  return query ? `${path}?${query}` : path
+}
+
+export const BENCHMARK = 'OSEBX'
+
+export interface ViewParams {
+  range: RangeKey
+  benchmark: boolean
+}
+
+function viewQuery(view?: ViewParams): Record<string, string | undefined> {
+  return { range: view?.range, benchmark: view?.benchmark ? BENCHMARK : undefined }
 }
 
 function sendJson<T>(method: 'POST' | 'PATCH', path: string, body: unknown, headers: Record<string, string> = {}): Promise<T> {
@@ -135,16 +160,39 @@ export async function fetchReports(customerId: string): Promise<{ reports: Repor
   return getJson(`/customers/${customerId}/reports`)
 }
 
-export async function fetchReport(customerId: string, reportId: string): Promise<ResolvedReport> {
-  return getJson(`/customers/${customerId}/reports/${encodeURIComponent(reportId)}`)
+export async function fetchReport(customerId: string, reportId: string, view?: ViewParams): Promise<ResolvedReport> {
+  return getJson(withQuery(`/customers/${customerId}/reports/${encodeURIComponent(reportId)}`, viewQuery(view)))
 }
 
-export async function resolveReport(customerId: string, spec: ReportSpec): Promise<ResolvedReport> {
-  return sendJson('POST', `/customers/${customerId}/reports/resolve`, { spec })
+export async function resolveReport(customerId: string, spec: ReportSpec, view?: ViewParams): Promise<ResolvedReport> {
+  const { range, benchmark } = viewQuery(view)
+  return sendJson('POST', `/customers/${customerId}/reports/resolve`, { spec, range, benchmark })
 }
 
-export async function askReportAi(customerId: string, prompt: string): Promise<AiReportResponse> {
-  return sendJson('POST', `/customers/${customerId}/reports/ai`, { prompt })
+export async function askReportAi(customerId: string, prompt: string, range?: RangeKey): Promise<AiReportResponse> {
+  return sendJson('POST', `/customers/${customerId}/reports/ai`, { prompt, range })
+}
+
+export async function fetchHistory(customerId: string, view: ViewParams): Promise<HistoryResponse> {
+  return getJson(withQuery(`/customers/${customerId}/history`, viewQuery(view)))
+}
+
+export async function fetchExposures(customerId: string, range: RangeKey): Promise<ExposuresResponse> {
+  return getJson(withQuery(`/customers/${customerId}/exposures`, { range }))
+}
+
+export async function fetchInstrumentHistory(ticker: string, view: ViewParams): Promise<InstrumentHistoryResponse> {
+  return getJson(withQuery(`/instruments/${encodeURIComponent(ticker)}/history`, viewQuery(view)))
+}
+
+export interface BenchmarkResponse {
+  points: HistoryPoint[]
+  stats: PeriodStats
+  source: BenchmarkSource
+}
+
+export async function fetchBenchmark(range: RangeKey): Promise<BenchmarkResponse> {
+  return getJson(withQuery(`/benchmarks/${BENCHMARK}`, { range }))
 }
 
 function adminHeaders(token: string): Record<string, string> {

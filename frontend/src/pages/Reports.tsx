@@ -1,8 +1,10 @@
 import { useEffect, useState } from 'react'
 import { useCustomerContext } from '../context/CustomerContext'
+import { rangeLabel, useViewSettings } from '../context/ViewSettingsContext'
 import { ApiError, askReportAi, fetchMetrics, fetchReport, fetchReports, resolveReport } from '../api/client'
 import type { AiReportResponse, MetricDefinition, ReportSummary, ResolvedReport } from '../api/reportTypes'
 import ReportView from '../components/ReportView'
+import { RangeSelector } from '../components/ViewControls'
 import { formatDateNo } from '../utils/format'
 import { addSavedReport, loadSavedReports, removeSavedReport, type SavedReport } from '../utils/savedReports'
 
@@ -36,22 +38,34 @@ type View =
 
 type Tab = 'standard' | 'saved'
 
+// basis = the range/benchmark setting the report numbers were computed for.
+interface AiResult {
+  response: AiReportResponse
+  basis: string
+}
+
+// Re-mounted (via key) when another report is opened, so a range change keeps the current report on screen while it refreshes.
 function LoadedReport({ customerId, view, onBack }: { customerId: string; view: Extract<View, { kind: 'standard' | 'saved' }>; onBack: () => void }) {
+  const { range } = useViewSettings()
   const [report, setReport] = useState<ResolvedReport | null>(null)
+  const [refreshing, setRefreshing] = useState(true)
   const [error, setError] = useState<string | null>(null)
 
   useEffect(() => {
     let cancelled = false
-    setReport(null)
+    setRefreshing(true)
     setError(null)
-    const request = view.kind === 'standard' ? fetchReport(customerId, view.summary.id) : resolveReport(customerId, view.saved.spec)
+    const params = { range, benchmark: true }
+    const request =
+      view.kind === 'standard' ? fetchReport(customerId, view.summary.id, params) : resolveReport(customerId, view.saved.spec, params)
     request
       .then((result) => !cancelled && setReport(result))
       .catch(() => !cancelled && setError('Klarte ikke å hente rapporten. Prøv igjen litt senere.'))
+      .finally(() => !cancelled && setRefreshing(false))
     return () => {
       cancelled = true
     }
-  }, [customerId, view])
+  }, [customerId, view, range])
 
   const title = view.kind === 'standard' ? view.summary.title : view.saved.title
 
@@ -62,7 +76,16 @@ function LoadedReport({ customerId, view, onBack }: { customerId: string; view: 
       </button>
       {error && <p className="error-state">{error}</p>}
       {!report && !error && <p className="loading-state">Henter «{title}» med ferske tall …</p>}
-      {report && <ReportView report={report} />}
+      {report && refreshing && (
+        <p className="updating" role="status">
+          Oppdaterer tallene for {rangeLabel(range)} …
+        </p>
+      )}
+      {report && (
+        <div className={refreshing ? 'is-stale' : undefined}>
+          <ReportView report={report} controls={<RangeSelector />} />
+        </div>
+      )}
     </div>
   )
 }
@@ -250,15 +273,19 @@ function AiTrace({ response }: { response: AiReportResponse }) {
 
 function AiPanel({
   customerId,
-  response,
-  setResponse,
+  result,
+  setResult,
   onSaved,
 }: {
   customerId: string
-  response: AiReportResponse | null
-  setResponse: (response: AiReportResponse | null) => void
+  result: AiResult | null
+  setResult: (result: AiResult | null) => void
   onSaved: (saved: SavedReport[]) => void
 }) {
+  const { range } = useViewSettings()
+  const viewKey = range
+  const response = result?.response ?? null
+  const [refreshing, setRefreshing] = useState(false)
   const [prompt, setPrompt] = useState('')
   const [asked, setAsked] = useState<string | null>(null)
   const [sending, setSending] = useState(false)
@@ -273,16 +300,31 @@ function AiPanel({
     return () => window.clearInterval(timer)
   }, [sending])
 
+  // Re-resolves the AI's spec for a new period instead of asking the AI again.
+  useEffect(() => {
+    if (!result?.response.spec || !result.response.report || result.basis === viewKey || sending) return
+    let cancelled = false
+    const { response: current } = result
+    setRefreshing(true)
+    resolveReport(customerId, current.spec!, { range, benchmark: true })
+      .then((report) => !cancelled && setResult({ response: { ...current, report: { ...report, source: current.report!.source } }, basis: viewKey }))
+      .catch(() => !cancelled && setError('Klarte ikke å oppdatere tallene for den nye perioden. Prøv igjen litt senere.'))
+      .finally(() => !cancelled && setRefreshing(false))
+    return () => {
+      cancelled = true
+    }
+  }, [viewKey, result, sending, customerId, range, setResult])
+
   async function ask(text: string) {
     const question = text.trim()
     if (!question || sending) return
     setSending(true)
     setError(null)
-    setResponse(null)
+    setResult(null)
     setSavedId(null)
     setAsked(question)
     try {
-      setResponse(await askReportAi(customerId, question))
+      setResult({ response: await askReportAi(customerId, question, range), basis: viewKey })
       setPrompt('')
     } catch (err) {
       setError(
@@ -377,9 +419,15 @@ function AiPanel({
             <p className="callout callout--error">Noe gikk galt da vi skulle lage rapporten. Prøv igjen litt senere.</p>
           )}
           {response.status !== 'refused' && response.report && (
-            <>
+            <div className={refreshing ? 'is-stale' : undefined}>
+              {refreshing && (
+                <p className="updating" role="status">
+                  Oppdaterer tallene for {rangeLabel(range)} …
+                </p>
+              )}
               <ReportView
                 report={response.report}
+                controls={response.spec ? <RangeSelector /> : undefined}
                 actions={
                   response.spec && (
                     <button type="button" className="btn btn--secondary" onClick={save} disabled={isSaved}>
@@ -389,7 +437,7 @@ function AiPanel({
                 }
               />
               <AiTrace response={response} />
-            </>
+            </div>
           )}
         </div>
       )}
@@ -405,7 +453,7 @@ function ReportsWorkspace({ customerId }: { customerId: string }) {
   const [metrics, setMetrics] = useState<MetricDefinition[] | null>(null)
   const [metricsError, setMetricsError] = useState<string | null>(null)
   const [saved, setSaved] = useState<SavedReport[]>(() => loadSavedReports(customerId))
-  const [aiResponse, setAiResponse] = useState<AiReportResponse | null>(null)
+  const [aiResult, setAiResult] = useState<AiResult | null>(null)
 
   useEffect(() => {
     let cancelled = false
@@ -462,9 +510,16 @@ function ReportsWorkspace({ customerId }: { customerId: string }) {
             onAskAi={() => setView({ kind: 'ai' })}
           />
         )}
-        {(view.kind === 'standard' || view.kind === 'saved') && <LoadedReport customerId={customerId} view={view} onBack={() => showList()} />}
+        {(view.kind === 'standard' || view.kind === 'saved') && (
+          <LoadedReport
+            key={view.kind === 'standard' ? `standard-${view.summary.id}` : `saved-${view.saved.saved_at}`}
+            customerId={customerId}
+            view={view}
+            onBack={() => showList()}
+          />
+        )}
         {view.kind === 'metrics' && <MetricCatalog metrics={metrics} error={metricsError} />}
-        {view.kind === 'ai' && <AiPanel customerId={customerId} response={aiResponse} setResponse={setAiResponse} onSaved={setSaved} />}
+        {view.kind === 'ai' && <AiPanel customerId={customerId} result={aiResult} setResult={setAiResult} onSaved={setSaved} />}
       </div>
     </div>
   )

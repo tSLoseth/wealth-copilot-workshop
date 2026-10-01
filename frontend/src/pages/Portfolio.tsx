@@ -1,15 +1,19 @@
 import { useEffect, useState } from 'react'
 import { useCustomerContext } from '../context/CustomerContext'
-import { fetchPerformance, fetchPortfolio } from '../api/client'
-import type { PerformanceSummary, PortfolioSummary } from '../api/types'
+import { fetchPortfolio } from '../api/client'
+import type { PortfolioSummary } from '../api/types'
 import AllocationPieChart from '../components/AllocationPieChart'
-import PerformanceChart from '../components/PerformanceChart'
-import { formatCurrency } from '../utils/format'
+import HistoryChart from '../components/HistoryChart'
+import HoldingsTable from '../components/HoldingsTable'
+import { rangeLabel, useViewSettings } from '../context/ViewSettingsContext'
+import { useExposures } from '../hooks/useApiData'
+import { formatKr, formatNum, formatSignedPct } from '../utils/format'
 
 export default function Portfolio() {
   const { selectedCustomerId } = useCustomerContext()
+  const { range } = useViewSettings()
+  const exposures = useExposures(selectedCustomerId)
   const [portfolio, setPortfolio] = useState<PortfolioSummary | null>(null)
-  const [performance, setPerformance] = useState<PerformanceSummary | null>(null)
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
 
@@ -18,12 +22,8 @@ export default function Portfolio() {
     let cancelled = false
     setLoading(true)
     setError(null)
-    Promise.all([fetchPortfolio(selectedCustomerId), fetchPerformance(selectedCustomerId)])
-      .then(([portfolioRes, performanceRes]) => {
-        if (cancelled) return
-        setPortfolio(portfolioRes)
-        setPerformance(performanceRes)
-      })
+    fetchPortfolio(selectedCustomerId)
+      .then((portfolioRes) => !cancelled && setPortfolio(portfolioRes))
       .catch((err: Error) => !cancelled && setError(err.message))
       .finally(() => !cancelled && setLoading(false))
     return () => {
@@ -31,70 +31,39 @@ export default function Portfolio() {
     }
   }, [selectedCustomerId])
 
-  if (loading) return <p className="loading-state">Loading portfolio...</p>
-  if (error) return <p className="error-state">Could not load portfolio data: {error}</p>
-  if (!portfolio || !performance) return null
+  if (loading) return <p className="loading-state">Henter porteføljen …</p>
+  if (error) return <p className="error-state">Klarte ikke å hente porteføljen: {error}</p>
+  if (!portfolio || !selectedCustomerId) return null
 
   return (
     <div className="page">
       <div className="page-heading">
-        <p className="eyebrow">Your investments</p>
-        <h2>Portfolio</h2>
+        <p className="eyebrow">Investeringene dine</p>
+        <h2>Portefølje</h2>
       </div>
 
-      <section className="panel">
-        <h3>Performance</h3>
-        <PerformanceChart series={performance.series} />
-      </section>
+      <HistoryChart customerId={selectedCustomerId} title="Utvikling i porteføljen" />
 
       <div className="chart-grid">
-        <AllocationPieChart data={portfolio.allocation_by_asset_type} title="Allocation by asset type" />
-        <AllocationPieChart data={portfolio.allocation_by_geography} title="Allocation by geography" />
-        <AllocationPieChart data={portfolio.allocation_by_sector} title="Allocation by sector" />
+        <AllocationPieChart title="Aktivatype" dimension="asset_type" holdings={portfolio.allocation_by_asset_type} customerId={selectedCustomerId} />
+        <AllocationPieChart title="Region" dimension="geography" holdings={portfolio.allocation_by_geography} customerId={selectedCustomerId} />
+        <AllocationPieChart title="Sektor" dimension="sector" holdings={portfolio.allocation_by_sector} customerId={selectedCustomerId} />
       </div>
 
       <section className="panel">
-        <h3>Largest holdings</h3>
-        {portfolio.largest_holdings.length === 0 ? (
-          <p className="empty-state">No holdings to display.</p>
-        ) : (
-          <table className="holdings-table">
-            <thead>
-              <tr>
-                <th>Name</th>
-                <th>Type</th>
-                <th>Value</th>
-                <th>Weight</th>
-                <th>Unrealized gain/loss</th>
-              </tr>
-            </thead>
-            <tbody>
-              {portfolio.largest_holdings.map((holding) => (
-                <tr key={holding.investment_id}>
-                  <td>
-                    <div className="holdings-table__name">{holding.name}</div>
-                    <div className="holdings-table__ticker">{holding.ticker}</div>
-                  </td>
-                  <td>{holding.asset_type}</td>
-                  <td>{formatCurrency(holding.market_value)}</td>
-                  <td>{holding.weight_pct}%</td>
-                  <td className={holding.unrealized_gain_loss >= 0 ? 'positive' : 'negative'}>
-                    {holding.unrealized_gain_loss >= 0 ? '+' : ''}
-                    {formatCurrency(holding.unrealized_gain_loss)} ({holding.unrealized_gain_loss_pct}%)
-                  </td>
-                </tr>
-              ))}
-            </tbody>
-          </table>
-        )}
+        <h3>Største beholdninger</h3>
+        <HoldingsTable holdings={portfolio.largest_holdings} positions={exposures.data?.positions} periodLabel={rangeLabel(range)} />
+        <p className="click-hint">Klikk på en beholdning for detaljer</p>
       </section>
 
       <section className="panel panel--muted">
-        <h3>Portfolio summary</h3>
-        <p>Total value: {formatCurrency(portfolio.total_value)}</p>
-        <p>Cash: {formatCurrency(portfolio.cash_value)} ({portfolio.cash_percentage}%)</p>
+        <h3>Oppsummering</h3>
+        <p>Samlet verdi: {formatKr(portfolio.total_value)}</p>
         <p>
-          Unrealized gain/loss: {formatCurrency(portfolio.unrealized_gain_loss)} ({portfolio.unrealized_gain_loss_pct}%)
+          Kontanter: {formatKr(portfolio.cash_value)} ({formatNum(portfolio.cash_percentage)} %)
+        </p>
+        <p>
+          Urealisert gevinst/tap: {formatKr(portfolio.unrealized_gain_loss)} ({formatSignedPct(portfolio.unrealized_gain_loss_pct)})
         </p>
       </section>
     </div>

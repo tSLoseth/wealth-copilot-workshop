@@ -1,7 +1,8 @@
 import { cleanup, fireEvent, render, screen } from '@testing-library/react'
-import { afterEach, describe, expect, it } from 'vitest'
+import { afterEach, describe, expect, it, vi } from 'vitest'
 import type { MetricResult, ResolvedReport } from '../api/reportTypes'
 import ReportView from '../components/ReportView'
+import { DrillDownContext } from '../context/DrillDownContext'
 
 // recharts' ResponsiveContainer needs ResizeObserver, which jsdom lacks.
 globalThis.ResizeObserver ??= class {
@@ -86,6 +87,36 @@ describe('ReportView', () => {
     expect(screen.getByText('TECHF')).toBeTruthy()
     expect(screen.getByText('Datagrunnlag')).toBeTruthy()
     expect(screen.getByText('Dette er ikke investeringsråd.')).toBeTruthy()
+  })
+
+  it('opens the drill-down from table rows and shows OSEBX and the period', () => {
+    const openDrill = vi.fn()
+    const drill = { dimension: 'sector' as const, value: 'Technology', label: 'Teknologi' }
+    const drillReport: ResolvedReport = {
+      ...report,
+      blocks: [
+        {
+          type: 'kpi',
+          metric: metric({
+            id: 'period_return',
+            title: 'Avkastning',
+            benchmark: { label: 'OSEBX samme periode', value: 8.1, display: '+8,1 %' },
+            period: { range: '1Y', label: 'Siste år', start: '2025-10-01', end: '2026-10-01' },
+          }),
+        },
+        { type: 'table', metric: metric({ id: 'tech_exposure', title: 'Sektorer', breakdown: [{ label: 'Teknologi', value: 58, display: '58 %', drill }] }) },
+      ],
+    }
+    render(
+      <DrillDownContext.Provider value={{ stack: [], openDrill, goTo: vi.fn(), back: vi.fn(), close: vi.fn() }}>
+        <ReportView report={drillReport} />
+      </DrillDownContext.Provider>,
+    )
+    expect(screen.getByText('OSEBX: +8,1 %')).toBeTruthy()
+    expect(screen.getByText('Siste år')).toBeTruthy()
+    fireEvent.click(screen.getByRole('button', { name: 'Teknologi' }))
+    expect(openDrill).toHaveBeenCalledWith(drill)
+    expect(openDrill).toHaveBeenCalledTimes(1)
   })
 
   it('reveals provenance behind "Hvorfor ser jeg dette?"', () => {

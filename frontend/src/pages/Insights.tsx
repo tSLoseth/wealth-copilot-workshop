@@ -1,60 +1,147 @@
-import { useEffect, useState } from 'react'
+import { Link } from 'react-router-dom'
+import { fetchInsights } from '../api/client'
+import { fetchRiskInsights, type RiskInsight } from '../api/riskClient'
+import type { Insight, InsightsSummary } from '../api/types'
+import { RangePicker } from '../components/risk/RiskParts'
 import { useCustomerContext } from '../context/CustomerContext'
-import { fetchInsights, fetchRisk } from '../api/client'
-import type { InsightsSummary, RiskSummary } from '../api/types'
-import InsightCard from '../components/InsightCard'
+import { useDrillDown } from '../context/DrillDownContext'
+import { useViewSettings } from '../context/ViewSettingsContext'
+import { useApiData } from '../hooks/useApiData'
+import { formatKr, formatPct } from '../utils/format'
+
+const SEVERITY_LABEL: Record<RiskInsight['severity'], string> = {
+  info: 'Til info',
+  notice: 'Verdt å vite',
+  warning: 'Viktig',
+}
+
+function RiskInsightCard({ insight }: { insight: RiskInsight }) {
+  const { openDrill } = useDrillDown()
+  return (
+    <article className={`insight-card insight-card--${insight.severity} risk-insight`}>
+      <div className="risk-insight__top">
+        <span className="insight-card__badge">{SEVERITY_LABEL[insight.severity]}</span>
+        {insight.value_display && <span className="risk-insight__value">{insight.value_display}</span>}
+      </div>
+      <h4>{insight.title}</h4>
+      <p>{insight.detail}</p>
+      <div className="risk-insight__actions">
+        {insight.drill && (
+          <button type="button" className="btn btn--secondary" onClick={() => openDrill(insight.drill!)}>
+            Se detaljer
+          </button>
+        )}
+        {insight.report_id && (
+          <Link to="/rapporter" className="btn btn--secondary">
+            Åpne rapport
+          </Link>
+        )}
+        <Link to="/risiko" className="link-button">
+          Se på risikosiden
+        </Link>
+      </div>
+    </article>
+  )
+}
+
+// The starter API speaks English and overlaps with the risk insights above, so only the
+// savings-related items are kept here, rewritten in Norwegian from their numbers.
+function economyInsights(data: InsightsSummary): Insight[] {
+  const out: Insight[] = []
+  const { savings } = data
+  out.push({
+    id: 'savings-rate',
+    severity: savings.savingsRatePct >= 15 ? 'info' : 'notice',
+    title: savings.savingsRatePct >= 15 ? 'Du sparer en god del hver måned' : 'Du sparer lite hver måned',
+    detail: `I snitt setter du av ${formatKr(savings.averageMonthlySavings)} i måneden. Det er ${formatPct(savings.savingsRatePct)} av inntekten din.`,
+  })
+  const cash = data.insights.find((i) => i.id === 'high-cash-allocation')
+  const cashPct = cash?.detail.match(/([\d.]+)%/)?.[1]
+  if (cash) {
+    out.push({
+      id: 'high-cash',
+      severity: cash.severity,
+      title: 'Mye står i kontanter',
+      detail: `${cashPct ? `${formatPct(Number(cashPct))} av porteføljen` : 'En stor del av porteføljen'} står i kontanter. Over lang tid kan det gi lavere vekst enn du ellers kunne fått.`,
+    })
+  }
+  return out
+}
 
 export default function Insights() {
   const { selectedCustomerId } = useCustomerContext()
-  const [insights, setInsights] = useState<InsightsSummary | null>(null)
-  const [risk, setRisk] = useState<RiskSummary | null>(null)
-  const [loading, setLoading] = useState(true)
-  const [error, setError] = useState<string | null>(null)
-
-  useEffect(() => {
-    if (!selectedCustomerId) return
-    let cancelled = false
-    setLoading(true)
-    setError(null)
-    Promise.all([fetchInsights(selectedCustomerId), fetchRisk(selectedCustomerId)])
-      .then(([insightsRes, riskRes]) => {
-        if (cancelled) return
-        setInsights(insightsRes)
-        setRisk(riskRes)
-      })
-      .catch((err: Error) => !cancelled && setError(err.message))
-      .finally(() => !cancelled && setLoading(false))
-    return () => {
-      cancelled = true
-    }
-  }, [selectedCustomerId])
-
-  if (loading) return <p className="loading-state">Loading insights...</p>
-  if (error) return <p className="error-state">Could not load insights: {error}</p>
-  if (!insights || !risk) return null
+  const { range } = useViewSettings()
+  const risk = useApiData(selectedCustomerId ? `risk-insights|${selectedCustomerId}|${range}` : null, () =>
+    fetchRiskInsights(selectedCustomerId!, range),
+  )
+  const economy = useApiData(selectedCustomerId ? `insights|${selectedCustomerId}` : null, () => fetchInsights(selectedCustomerId!))
 
   return (
     <div className="page">
-      <div className="page-heading">
-        <p className="eyebrow">Deterministic, rule-based</p>
-        <h2>Insights</h2>
+      <div className="page-heading risk-heading">
+        <div>
+          <p className="eyebrow">Regelbasert, uten AI</p>
+          <h2>Innsikter</h2>
+          <p className="page-heading__lead">De viktigste tingene vi ser i porteføljen din akkurat nå, sortert etter hvor viktige de er.</p>
+        </div>
+        <RangePicker />
       </div>
 
-      <div className="insight-grid">
-        {insights.insights.map((insight) => (
-          <InsightCard key={insight.id} insight={insight} />
-        ))}
-      </div>
+      <section className="risk-insights">
+        <h3>Risiko og portefølje</h3>
+        {risk.error ? (
+          <p className="error-state">Kunne ikke hente innsiktene: {risk.error.message}</p>
+        ) : !risk.data ? (
+          <p className="loading-state">Laster innsikter …</p>
+        ) : risk.data.insights.length === 0 ? (
+          <p className="empty-state">Vi fant ingenting spesielt å peke på akkurat nå.</p>
+        ) : (
+          <div className={`insight-grid${risk.loading ? ' is-stale' : ''}`}>
+            {risk.data.insights.map((insight) => (
+              <RiskInsightCard key={insight.id} insight={insight} />
+            ))}
+          </div>
+        )}
+      </section>
 
-      <section className="panel panel--muted">
-        <h3>Risk score breakdown</h3>
-        <p className="disclaimer">{risk.disclaimer}</p>
-        <ul className="risk-factor-list">
-          <li>Asset allocation: {risk.factors.asset_allocation_score}</li>
-          <li>Concentration: {risk.factors.concentration_score}</li>
-          <li>Geography: {risk.factors.geography_score}</li>
-          <li>Volatility: {risk.factors.volatility_score}</li>
-        </ul>
+      <section className="panel panel--muted risk-economy">
+        <h3>Økonomi og sparing</h3>
+        {economy.error ? (
+          <p className="error-state">Kunne ikke hente sparetallene: {economy.error.message}</p>
+        ) : !economy.data ? (
+          <p className="loading-state">Laster …</p>
+        ) : (
+          <>
+            <div className="stat-grid">
+              <div className="stat-card">
+                <p className="stat-card__label">Inntekt per måned (snitt)</p>
+                <p className="stat-card__value">{formatKr(economy.data.savings.averageMonthlyIncome)}</p>
+              </div>
+              <div className="stat-card">
+                <p className="stat-card__label">Utgifter per måned (snitt)</p>
+                <p className="stat-card__value">{formatKr(economy.data.savings.averageMonthlyExpenses)}</p>
+              </div>
+              <div className="stat-card">
+                <p className="stat-card__label">Sparing per måned (snitt)</p>
+                <p className="stat-card__value">{formatKr(economy.data.savings.averageMonthlySavings)}</p>
+              </div>
+              <div className="stat-card">
+                <p className="stat-card__label">Sparerate</p>
+                <p className="stat-card__value">{formatPct(economy.data.savings.savingsRatePct)}</p>
+                <p className="stat-card__sublabel">Andel av inntekten du setter av</p>
+              </div>
+            </div>
+            <div className="insight-grid">
+                {economyInsights(economy.data).map((insight) => (
+                  <article key={insight.id} className={`insight-card insight-card--${insight.severity}`}>
+                    <span className="insight-card__badge">{SEVERITY_LABEL[insight.severity]}</span>
+                    <h4>{insight.title}</h4>
+                    <p>{insight.detail}</p>
+                  </article>
+                ))}
+              </div>
+          </>
+        )}
       </section>
     </div>
   )

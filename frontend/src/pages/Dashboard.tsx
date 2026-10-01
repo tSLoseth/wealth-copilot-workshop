@@ -1,16 +1,42 @@
 import { useEffect, useState } from 'react'
+import { Link } from 'react-router-dom'
 import { useCustomerContext } from '../context/CustomerContext'
-import { fetchAccounts, fetchInsights, fetchPerformance, fetchPortfolio, fetchRisk } from '../api/client'
-import type { Account, InsightsSummary, PerformanceSummary, PortfolioSummary, RiskSummary } from '../api/types'
+import { fetchAccounts, fetchInsights, fetchPortfolio, fetchRisk } from '../api/client'
+import type { Account, InsightsSummary, PortfolioSummary, RiskSummary } from '../api/types'
 import StatCard from '../components/StatCard'
-import PerformanceChart from '../components/PerformanceChart'
-import { formatCurrency } from '../utils/format'
+import HistoryChart from '../components/HistoryChart'
+import { rangeLabel, useViewSettings } from '../context/ViewSettingsContext'
+import { useCustomerHistory } from '../hooks/useApiData'
+import { formatKr, formatNum, formatSignedPct } from '../utils/format'
+import { RISK_CATEGORY_NB } from '../utils/labels'
+
+function PeriodReturnCard({ customerId }: { customerId: string }) {
+  const { range, showBenchmark } = useViewSettings()
+  const { data, error } = useCustomerHistory(customerId)
+  const label = `Avkastning (${rangeLabel(range)})`
+  if (!data) return <StatCard label={label} value={error ? 'Ikke tilgjengelig' : '…'} />
+  const value = data.portfolio.return_pct
+  const benchmark = showBenchmark && data.benchmark ? `OSEBX: ${formatSignedPct(data.benchmark.return_pct)}` : undefined
+  return <StatCard label={label} value={formatSignedPct(value)} sublabel={benchmark} tone={value >= 0 ? 'positive' : 'negative'} />
+}
+
+function RiskCard({ risk }: { risk: RiskSummary }) {
+  return (
+    <div className="stat-card">
+      <p className="stat-card__label">Risikoscore</p>
+      <p className="stat-card__value">{risk.risk_score}/100</p>
+      <p className="stat-card__sublabel">{RISK_CATEGORY_NB[risk.risk_category] ?? risk.risk_category}</p>
+      <Link to="/risiko" className="stat-card__link">
+        Se hva risikoen består av →
+      </Link>
+    </div>
+  )
+}
 
 export default function Dashboard() {
   const { selectedCustomerId, selectedCustomer } = useCustomerContext()
   const [accounts, setAccounts] = useState<Account[]>([])
   const [portfolio, setPortfolio] = useState<PortfolioSummary | null>(null)
-  const [performance, setPerformance] = useState<PerformanceSummary | null>(null)
   const [risk, setRisk] = useState<RiskSummary | null>(null)
   const [insights, setInsights] = useState<InsightsSummary | null>(null)
   const [loading, setLoading] = useState(true)
@@ -21,18 +47,11 @@ export default function Dashboard() {
     let cancelled = false
     setLoading(true)
     setError(null)
-    Promise.all([
-      fetchAccounts(selectedCustomerId),
-      fetchPortfolio(selectedCustomerId),
-      fetchPerformance(selectedCustomerId),
-      fetchRisk(selectedCustomerId),
-      fetchInsights(selectedCustomerId),
-    ])
-      .then(([accountsRes, portfolioRes, performanceRes, riskRes, insightsRes]) => {
+    Promise.all([fetchAccounts(selectedCustomerId), fetchPortfolio(selectedCustomerId), fetchRisk(selectedCustomerId), fetchInsights(selectedCustomerId)])
+      .then(([accountsRes, portfolioRes, riskRes, insightsRes]) => {
         if (cancelled) return
         setAccounts(accountsRes.accounts)
         setPortfolio(portfolioRes)
-        setPerformance(performanceRes)
         setRisk(riskRes)
         setInsights(insightsRes)
       })
@@ -43,9 +62,9 @@ export default function Dashboard() {
     }
   }, [selectedCustomerId])
 
-  if (loading) return <p className="loading-state">Loading dashboard...</p>
-  if (error) return <p className="error-state">Could not load dashboard data: {error}</p>
-  if (!portfolio || !performance || !risk || !insights) return null
+  if (loading) return <p className="loading-state">Henter oversikten …</p>
+  if (error) return <p className="error-state">Klarte ikke å hente oversikten: {error}</p>
+  if (!portfolio || !risk || !insights || !selectedCustomerId) return null
 
   const cashBalance = accounts
     .filter((a) => a.account_type === 'Current Account' || a.account_type === 'Savings')
@@ -58,35 +77,28 @@ export default function Dashboard() {
   return (
     <div className="page">
       <div className="page-heading">
-        <p className="eyebrow">Welcome back</p>
+        <p className="eyebrow">Velkommen tilbake</p>
         <h2>{selectedCustomer ? `${selectedCustomer.first_name} ${selectedCustomer.last_name}` : ''}</h2>
       </div>
 
       <div className="stat-grid">
-        <StatCard label="Net worth" value={formatCurrency(netWorth)} />
-        <StatCard label="Bank deposits" value={formatCurrency(cashBalance)} />
-        <StatCard label="Investments" value={formatCurrency(portfolio.total_value)} />
+        <StatCard label="Nettoformue" value={formatKr(netWorth)} />
+        <StatCard label="Bankinnskudd" value={formatKr(cashBalance)} />
+        <StatCard label="Investeringer" value={formatKr(portfolio.total_value)} />
         <StatCard
-          label="Monthly savings"
-          value={formatCurrency(insights.savings.averageMonthlySavings)}
-          sublabel={`${insights.savings.savingsRatePct}% of income`}
+          label="Sparing per måned"
+          value={formatKr(insights.savings.averageMonthlySavings)}
+          sublabel={`${formatNum(insights.savings.savingsRatePct)} % av inntekten`}
         />
-        <StatCard
-          label="Portfolio performance"
-          value={`${performance.period_return_pct >= 0 ? '+' : ''}${performance.period_return_pct}%`}
-          tone={performance.period_return_pct >= 0 ? 'positive' : 'negative'}
-        />
-        <StatCard
-          label="Risk score"
-          value={`${risk.risk_score}/100`}
-          sublabel={risk.risk_category}
-        />
+        <PeriodReturnCard customerId={selectedCustomerId} />
+        <RiskCard risk={risk} />
       </div>
 
-      <section className="panel">
-        <h3>Portfolio performance</h3>
-        <PerformanceChart series={performance.series} />
-      </section>
+      <HistoryChart customerId={selectedCustomerId} title="Utvikling i porteføljen" />
+
+      <p className="dashboard-more">
+        <Link to="/portfolio">Se sektorer, regioner og største beholdninger i porteføljen →</Link>
+      </p>
     </div>
   )
 }
