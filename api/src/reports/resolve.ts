@@ -4,7 +4,7 @@
 import { DATES, buildModel } from '../metrics/engine.js'
 import { assetTypeNb, num, sectorNb } from '../metrics/format.js'
 import { MetricError, computeMetric, getMetricDefinition, type MetricContext } from '../metrics/catalog.js'
-import type { BlockType, DataQualityNote, MetricResult, ReportSpec, ResolvedBlock, ResolvedReport, StressScenario } from './types.js'
+import type { BlockType, DataQualityNote, RangeKey, MetricResult, ReportSpec, ResolvedBlock, ResolvedReport, StressScenario } from './types.js'
 
 const PLACEHOLDER = /\{\{\s*([a-z_]+)(?:\(([^)]*)\))?\.([a-z0-9_]+)\s*\}\}/g
 const BLOCK_TYPES: BlockType[] = ['kpi', 'bar', 'table', 'scenario', 'status', 'text']
@@ -104,8 +104,8 @@ export function fillPlaceholders(text: string, ctx: MetricContext, used?: Set<st
   })
 }
 
-export function resolveReport(spec: ReportSpec, customerId: string, source: ResolvedReport['source'], now = new Date()): ResolvedReport {
-  const ctx: MetricContext = { customerId, customScenarios: spec.custom_scenarios ?? [], now }
+export function resolveReport(spec: ReportSpec, customerId: string, source: ResolvedReport['source'], now = new Date(), range?: RangeKey): ResolvedReport {
+  const ctx: MetricContext = { customerId, customScenarios: spec.custom_scenarios ?? [], now, range }
   const metrics: MetricResult[] = []
   const hasInvestments = buildModel(customerId).total > 0
   const specBlocks = hasInvestments ? spec.blocks : spec.blocks.filter((b) => b.metric === 'data_freshness')

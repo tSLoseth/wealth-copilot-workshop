@@ -8,6 +8,34 @@ export interface DataQualityNote {
   message: string
 }
 
+export type RangeKey = '1M' | '3M' | '6M' | 'YTD' | '1Y' | '3Y' | '5Y' | 'ALL'
+
+export const RANGES: { key: RangeKey; label: string }[] = [
+  { key: '1M', label: '1 md' },
+  { key: '3M', label: '3 md' },
+  { key: '6M', label: '6 md' },
+  { key: 'YTD', label: 'I år' },
+  { key: '1Y', label: '1 år' },
+  { key: '3Y', label: '3 år' },
+  { key: '5Y', label: '5 år' },
+  { key: 'ALL', label: 'Alt' },
+]
+
+export type DrillDimension = 'sector' | 'geography' | 'asset_type' | 'instrument'
+
+export interface DrillTarget {
+  dimension: DrillDimension
+  // Raw value as in the data (e.g. "United States", "Technology", a ticker).
+  value: string
+  label: string
+}
+
+export interface BenchmarkValue {
+  label: string
+  value: number | null
+  display: string
+}
+
 export interface BreakdownRow {
   label: string
   value: number
@@ -16,6 +44,8 @@ export interface BreakdownRow {
   secondary?: number
   secondary_display?: string
   meta?: Record<string, string | number>
+  // Set when clicking the row should open the drill-down panel.
+  drill?: DrillTarget
 }
 
 export interface MetricResult {
@@ -31,6 +61,9 @@ export interface MetricResult {
   // Flat, pre-formatted facts the AI may reference as {{metric_id.fact}}.
   facts: Record<string, string>
   status?: 'within' | 'above' | 'below' | 'unknown'
+  // The same measure for OSEBX over the same period, when it is comparable.
+  benchmark?: BenchmarkValue
+  period?: { range: RangeKey; label: string; start: string; end: string }
   provenance: {
     sources: string[]
     period?: string
@@ -153,6 +186,10 @@ export interface CustomerActivity {
   question_count: number
   unreviewed_count: number
   last_asked_at: string
+  last_active_at: string
+  report_view_count: number
+  copilot_question_count: number
+  top_reports: { title: string; count: number }[]
   topics: { topic: string; count: number }[]
   flags: { flag: string; count: number }[]
 }
@@ -169,3 +206,122 @@ export const TOPICS = [
 ] as const
 
 export const FLAGS = ['ønsker_råd', 'mangler_data', 'bekymring', 'utenfor_tema'] as const
+
+export interface BenchmarkSource {
+  provider: 'Yahoo Finance'
+  symbol: string
+  name: string
+  mode: 'live' | 'snapshot'
+  fetched_at: string
+  last_date: string
+}
+
+export interface PeriodStats {
+  return_pct: number
+  volatility_pct: number
+  max_drawdown_pct: number
+  worst_day_pct: number
+  worst_day_date: string | null
+}
+
+export interface HistoryPoint {
+  date: string
+  // Indexed to 100 at the start of the period.
+  index: number
+  value?: number
+}
+
+export interface HistoryResponse {
+  customer_id: string
+  range: RangeKey
+  start: string
+  end: string
+  portfolio: PeriodStats & { points: HistoryPoint[]; start_value: number; end_value: number }
+  benchmark: (PeriodStats & { points: HistoryPoint[]; source: BenchmarkSource }) | null
+  notes: DataQualityNote[]
+}
+
+export interface ExposurePathRow {
+  via: string
+  via_name: string
+  value: number
+  weight_pct: number
+}
+
+export interface ExposureRow {
+  ticker: string
+  name: string
+  asset_type: string
+  sector: string
+  geography: string
+  asset_type_label: string
+  sector_label: string
+  geography_label: string
+  value: number
+  weight_pct: number
+  risk_contribution_pct: number
+  return_pct: number | null
+  paths: ExposurePathRow[]
+}
+
+export interface PositionRow {
+  ticker: string
+  name: string
+  asset_type: string
+  sector: string
+  geography: string
+  asset_type_label: string
+  sector_label: string
+  geography_label: string
+  quantity: number
+  price: number
+  value: number
+  weight_pct: number
+  risk_contribution_pct: number
+  return_pct: number | null
+  is_fund: boolean
+}
+
+export interface ExposuresResponse {
+  customer_id: string
+  range: RangeKey
+  start: string
+  end: string
+  total_value: number
+  positions: PositionRow[]
+  exposures: ExposureRow[]
+  benchmark_return_pct: number | null
+}
+
+export interface InstrumentHistoryResponse {
+  ticker: string
+  name: string
+  asset_type_label: string
+  sector_label: string
+  geography_label: string
+  range: RangeKey
+  start: string
+  end: string
+  points: (HistoryPoint & { price: number })[]
+  stats: PeriodStats
+  benchmark: { points: HistoryPoint[]; stats: PeriodStats; source: BenchmarkSource } | null
+  held_by_funds: { fund_ticker: string; fund_name: string; weight_pct: number }[]
+  fund_holdings: { constituent_ticker: string; name: string; sector_label: string; geography_label: string; weight_pct: number }[]
+}
+
+export type CustomerEventType = 'report_view' | 'copilot_chat'
+
+// Report views (standard, saved and AI reports) and Wealth Copilot chat questions.
+export interface CustomerEvent {
+  id: string
+  customer_id: string
+  created_at: string
+  event_type: CustomerEventType
+  report_id: string | null
+  report_title: string | null
+  report_source: string | null
+  range: string | null
+  prompt: string | null
+  answer: string | null
+  intent: string | null
+}

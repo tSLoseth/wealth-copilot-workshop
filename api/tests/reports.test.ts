@@ -100,7 +100,7 @@ describe('report endpoints', () => {
   const app = createApp()
 
   it('lists standard reports and the metric catalog', async () => {
-    expect((await request(app).get(`/customers/${JONAS}/reports`)).body.reports).toHaveLength(4)
+    expect((await request(app).get(`/customers/${JONAS}/reports`)).body.reports).toHaveLength(5)
     expect((await request(app).get('/metrics')).body.metrics.length).toBeGreaterThan(10)
   })
 
@@ -134,5 +134,58 @@ describe('report endpoints', () => {
   it('protects admin endpoints', async () => {
     expect((await request(app).get('/admin/customers/activity')).status).toBe(401)
     expect((await request(app).get('/admin/customers/activity').set('x-admin-token', 'wrong')).status).toBe(401)
+  })
+})
+
+describe('time ranges, benchmark and drill-down', () => {
+  const app = createApp()
+
+  it('risk metrics follow the selected range and carry an OSEBX comparison', () => {
+    const short = computeMetric({ ...ctx, range: '1M' }, 'annual_volatility')
+    const long = computeMetric({ ...ctx, range: '5Y' }, 'annual_volatility')
+    expect(short.period?.range).toBe('1M')
+    expect(long.period?.range).toBe('5Y')
+    expect(long.benchmark?.label).toBe('OSEBX')
+  })
+
+  it('replays a real market episode', () => {
+    const episode = computeMetric(ctx, 'historical_episode', { episode: 'tech-2022' })
+    expect(episode.value).toBeLessThan(0)
+    expect(episode.benchmark).toBeDefined()
+  })
+
+  it('group metrics expose drill targets', () => {
+    const geo = computeMetric(ctx, 'geography_exposure')
+    expect(geo.breakdown!.every((b) => b.drill?.dimension === 'geography')).toBe(true)
+  })
+
+  it('serves history with OSEBX on the same dates', async () => {
+    const res = await request(app).get(`/customers/${JONAS}/history?range=3Y&benchmark=OSEBX`)
+    expect(res.status).toBe(200)
+    expect(res.body.portfolio.points[0].index).toBe(100)
+    expect(res.body.benchmark.points[0].date).toBe(res.body.portfolio.points[0].date)
+    expect(res.body.portfolio.points.length).toBeLessThanOrEqual(400)
+  })
+
+  it('serves look-through exposures whose weights sum to 100 %', async () => {
+    const res = await request(app).get(`/customers/${JONAS}/exposures?range=1Y`)
+    expect(sum(res.body.exposures.map((e: { weight_pct: number }) => e.weight_pct))).toBeCloseTo(100, 0)
+    expect(sum(res.body.exposures.map((e: { risk_contribution_pct: number }) => e.risk_contribution_pct))).toBeCloseTo(100, 0)
+  })
+
+  it('serves instrument history with the funds that hold it', async () => {
+    const res = await request(app).get('/instruments/USTK/history?range=1Y&benchmark=OSEBX')
+    expect(res.status).toBe(200)
+    expect(res.body.held_by_funds.map((f: { fund_ticker: string }) => f.fund_ticker)).toContain('TECHF')
+    expect((await request(app).get('/instruments/NOPE/history')).status).toBe(404)
+  })
+
+  it('logs report views and copilot questions for the advisor', async () => {
+    await request(app).get(`/customers/${JONAS}/reports/mot-borsen?range=5Y`)
+    await request(app).post(`/customers/${JONAS}/copilot`).send({ message: 'Am I diversified?' })
+    const res = await request(app).get(`/admin/events?customerId=${JONAS}`).set('x-admin-token', 'test-token')
+    const types = res.body.events.map((e: { event_type: string }) => e.event_type)
+    expect(types).toContain('report_view')
+    expect(types).toContain('copilot_chat')
   })
 })

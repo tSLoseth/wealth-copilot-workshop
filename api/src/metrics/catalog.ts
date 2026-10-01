@@ -2,17 +2,23 @@
 // Every metric is deterministic and returns its value together with the data,
 // assumptions and data-quality notes behind it.
 import { getCustomer } from '../data.js'
-import type { BreakdownRow, DataQualityNote, MetricDefinition, MetricResult, StressScenario } from '../reports/types.js'
+import type { BenchmarkValue, BreakdownRow, DataQualityNote, MetricDefinition, MetricResult, PeriodStats, RangeKey, StressScenario } from '../reports/types.js'
+import { OSEBX_NAME, osebxOn, osebxSource } from '../services/benchmark.js'
 import {
   DATES,
   buildModel,
   decomposeRisk,
   exposureRisk,
   hasPriceHistory,
+  portfolioValues,
   positionRisk,
-  priceOn,
+  pricesFor,
+  seriesStats,
+  windowFor,
+  windowLabel,
   type Exposure,
   type PortfolioModel,
+  type Window,
 } from './engine.js'
 import { PROFILE_NB, assetTypeNb, dateNb, daysBetween, geographyNb, kr, num, pct, round, sectorNb } from './format.js'
 
@@ -22,6 +28,7 @@ export interface MetricContext {
   customerId: string
   customScenarios: StressScenario[]
   now: Date
+  range?: RangeKey
 }
 
 type Params = Record<string, string | number>
@@ -40,6 +47,14 @@ export const PROFILE_BANDS: Record<string, { min: number; max: number; maxEquity
   Growth: { min: 10, max: 16, maxEquityPct: 85 },
   Aggressive: { min: 13, max: 24, maxEquityPct: 100 },
 }
+
+// Real market episodes (dates from the index history), replayed on today's holdings.
+export const HISTORICAL_EPISODES = [
+  { id: 'oil-2015', name: 'Oljeprisfallet (2015–2016)', start: '2015-05-21', end: '2016-02-11', description: 'Oljeprisen falt kraftig, og Oslo Børs falt med den.' },
+  { id: 'autumn-2018', name: 'Børsfallet høsten 2018', start: '2018-10-01', end: '2018-12-24', description: 'Renteuro og handelskrig ga brede fall på verdens børser.' },
+  { id: 'covid-2020', name: 'Koronakrakket (2020)', start: '2020-02-19', end: '2020-03-23', description: 'Børsene falt brått da pandemien stengte ned samfunn over hele verden.' },
+  { id: 'tech-2022', name: 'Teknologifallet (2022)', start: '2021-11-19', end: '2022-12-28', description: 'Høyere renter traff særlig teknologiaksjer, som falt mer enn resten av markedet.' },
+]
 
 export const STRESS_SCENARIOS: StressScenario[] = [
   {
@@ -65,13 +80,15 @@ export const STRESS_SCENARIOS: StressScenario[] = [
 
 const SOURCES = {
   holdings: 'investments.json – beholdningene dine',
-  prices: 'market_data.json – daglige kurser',
+  prices: 'market_data.json – daglige kurser (fiktive selskaper drevet av ekte indekser fra Yahoo Finance)',
+  osebx: 'Yahoo Finance – Oslo Børs hovedindeks (OSEBX.OL)',
   funds: 'fund_holdings.json – hva fondene eier',
   profile: 'customers.json – risikoprofilen din',
 }
 
 const ASSUMPTIONS = {
-  volatility: 'Svingningene er beregnet fra daglige kursendringer de siste 90 dagene og omregnet til ett år (252 handelsdager).',
+  volatility: 'Svingningene er beregnet fra daglige kursendringer i valgt periode og omregnet til ett år (252 handelsdager).',
+  synthetic: 'Selskapene er fiktive. De beveger seg med ekte indekser (OSEBX for nordiske selskaper, S&P 500 for resten, Nasdaq for teknologi), pluss syntetiske selskapsspesifikke bevegelser. Valuta er ikke med.',
   covariance: 'Risikobidraget tar hensyn til at investeringer ofte beveger seg sammen, ikke bare hvor mye hver enkelt svinger.',
   constantHoldings: 'Beregningen antar at du har eid de samme investeringene hele perioden. Kjøp og salg er ikke med.',
   lookThrough: 'Fondene er brutt ned i det de faktisk eier, basert på siste rapporterte beholdning fra fondene.',
@@ -79,11 +96,30 @@ const ASSUMPTIONS = {
   scenario: 'Stresstester er hypotetiske «hva om»-regnestykker, ikke prognoser.',
 }
 
-function period() {
-  return `${dateNb(DATES[0] ?? null)} – ${dateNb(DATES[DATES.length - 1] ?? null)}`
+function win(ctx: MetricContext) {
+  return windowFor(ctx.range)
 }
 
-function qualityNotes(model: PortfolioModel, now: Date, kinds: { risk?: boolean; lookThrough?: boolean }): DataQualityNote[] {
+function period(w: Window = windowFor()) {
+  return `${dateNb(w.startDate)} – ${dateNb(w.endDate)}`
+}
+
+function periodInfo(w: Window): MetricResult['period'] {
+  return { range: w.range, label: w.label, start: w.startDate, end: w.endDate }
+}
+
+export function osebxStats(w: Window): PeriodStats {
+  const dates = DATES.slice(w.start, w.end + 1)
+  return seriesStats(osebxOn(dates), dates)
+}
+
+function bench(display: string, value: number | null): BenchmarkValue {
+  return { label: 'OSEBX', value, display }
+}
+
+const signedPct = (v: number, decimals = 1) => `${v >= 0 ? '+' : '−'}${pct(Math.abs(v), decimals)}`
+
+function qualityNotes(model: PortfolioModel, now: Date, kinds: { risk?: boolean; lookThrough?: boolean; window?: Window }): DataQualityNote[] {
   const notes: DataQualityNote[] = []
   const lastPrice = DATES[DATES.length - 1]
   if (lastPrice) {
@@ -104,7 +140,9 @@ function qualityNotes(model: PortfolioModel, now: Date, kinds: { risk?: boolean;
     notes.push({ severity: days > 95 ? 'warning' : 'notice', message: `Fondenes beholdninger er rapportert per ${dateNb(model.fundHoldingsAsOf)} (${days} dager siden). Fondene kan ha endret sammensetning etterpå.` })
   }
   if (kinds.risk) {
-    notes.push({ severity: 'notice', message: `Beregningen bygger på bare ${DATES.length} dager med kurser. Det er for kort til å si sikkert hvordan porteføljen oppfører seg i et krakk.` })
+    const w = kinds.window ?? windowFor()
+    const days = w.end - w.start
+    if (days < 120) notes.push({ severity: 'notice', message: `Perioden har bare ${days} handelsdager. Svingninger beregnet over kort tid er usikre – velg en lengre periode for et mer stabilt bilde.` })
   }
   return notes
 }
@@ -169,7 +207,7 @@ const METRICS: Metric[] = [
         display: kr(model.total),
         unit: 'kr',
         value_label: 'Andel av verdien',
-        breakdown: model.positions.map((p) => ({ label: p.name, value: round(share(p.value, model)), display: pct(share(p.value, model)), meta: { ticker: p.ticker, verdi: kr(p.value), type: assetTypeNb(p.asset_type) } })),
+        breakdown: model.positions.map((p) => ({ label: p.name, value: round(share(p.value, model)), display: pct(share(p.value, model)), meta: { ticker: p.ticker, verdi: kr(p.value), type: assetTypeNb(p.asset_type) }, drill: { dimension: 'instrument', value: p.ticker, label: p.name } })),
         facts: { total: kr(model.total), positions_count: String(model.positions.length) },
         provenance: { sources: [SOURCES.holdings], as_of: DATES[DATES.length - 1], rows_used: model.positions.length },
         assumptions: ['Verdien er antall andeler ganger siste kurs.'],
@@ -182,19 +220,23 @@ const METRICS: Metric[] = [
     title: 'Forventede svingninger i et typisk år',
     question: 'Hvor mye kan verdien gå opp og ned i løpet av et vanlig år?',
     params: [],
-    facts: ['pct', 'kr'],
+    facts: ['pct', 'kr', 'bad_year_kr', 'osebx_pct', 'period'],
     compute(ctx) {
       const model = buildModel(ctx.customerId)
       if (model.total === 0) return empty(model, ctx.now)
-      const vol = exposureRisk(model).volatility * 100
+      const w = win(ctx)
+      const vol = exposureRisk(model, w).volatility * 100
+      const osebx = osebxStats(w).volatility_pct
       return {
         value: round(vol),
         display: `±${pct(vol)}`,
         unit: '%',
-        facts: { pct: `±${pct(vol)}`, kr: `±${kr((model.total * vol) / 100)}` },
-        provenance: { sources: [SOURCES.holdings, SOURCES.prices, SOURCES.funds], period: period(), rows_used: model.exposures.length * DATES.length },
-        assumptions: [ASSUMPTIONS.volatility, ASSUMPTIONS.covariance, 'I omtrent to av tre år vil verdien endre seg mindre enn dette. I dårlige år kan fallet bli større.', ASSUMPTIONS.constantHoldings],
-        data_quality: qualityNotes(model, ctx.now, { risk: true, lookThrough: true }),
+        benchmark: bench(`±${pct(osebx)}`, round(osebx)),
+        period: periodInfo(w),
+        facts: { pct: `±${pct(vol)}`, kr: `±${kr((model.total * vol) / 100)}`, bad_year_kr: kr((model.total * vol * 1.645) / 100), osebx_pct: `±${pct(osebx)}`, period: windowLabel(w) },
+        provenance: { sources: [SOURCES.holdings, SOURCES.prices, SOURCES.funds, SOURCES.osebx], period: period(w), rows_used: model.exposures.length * (w.end - w.start) },
+        assumptions: [ASSUMPTIONS.volatility, ASSUMPTIONS.covariance, 'I omtrent to av tre år vil verdien endre seg mindre enn dette. Et dårlig år (som skjer omtrent én gang hvert tjuende år) kan gi et fall på rundt 1,6 ganger dette.', ASSUMPTIONS.constantHoldings, ASSUMPTIONS.synthetic],
+        data_quality: qualityNotes(model, ctx.now, { risk: true, lookThrough: true, window: w }),
       }
     },
   },
@@ -207,9 +249,11 @@ const METRICS: Metric[] = [
     compute(ctx) {
       const model = buildModel(ctx.customerId)
       if (model.total === 0) return empty(model, ctx.now)
-      const risk = positionRisk(model)
+      const w = win(ctx)
+      const risk = positionRisk(model, w)
       const rows: BreakdownRow[] = model.positions
         .map((p, i) => ({
+          drill: { dimension: 'instrument' as const, value: p.ticker, label: p.name },
           label: p.name,
           value: round(share(p.value, model)),
           display: pct(share(p.value, model)),
@@ -230,9 +274,10 @@ const METRICS: Metric[] = [
           top_name: top.label, top_weight: top.display, top_risk: top.secondary_display ?? '',
           second_name: second?.label ?? '', second_weight: second?.display ?? '', second_risk: second?.secondary_display ?? '',
         },
-        provenance: { sources: [SOURCES.holdings, SOURCES.prices], period: period(), rows_used: model.positions.length * DATES.length },
-        assumptions: [ASSUMPTIONS.volatility, ASSUMPTIONS.covariance, 'Bidragene summerer til 100 % av svingningene.', ASSUMPTIONS.constantHoldings],
-        data_quality: qualityNotes(model, ctx.now, { risk: true }),
+        period: periodInfo(w),
+        provenance: { sources: [SOURCES.holdings, SOURCES.prices], period: period(w), rows_used: model.positions.length * (w.end - w.start) },
+        assumptions: [ASSUMPTIONS.volatility, ASSUMPTIONS.covariance, 'Bidragene summerer til 100 % av svingningene.', ASSUMPTIONS.constantHoldings, ASSUMPTIONS.synthetic],
+        data_quality: qualityNotes(model, ctx.now, { risk: true, window: w }),
       }
     },
   },
@@ -245,9 +290,11 @@ const METRICS: Metric[] = [
     compute(ctx) {
       const model = buildModel(ctx.customerId)
       if (model.total === 0) return empty(model, ctx.now)
-      const risk = exposureRisk(model)
+      const w = win(ctx)
+      const risk = exposureRisk(model, w)
       const rows = model.exposures
         .map((e, i) => ({
+          drill: { dimension: 'instrument' as const, value: e.ticker, label: e.name },
           label: e.name,
           value: round(share(e.value, model)),
           display: pct(share(e.value, model)),
@@ -265,9 +312,10 @@ const METRICS: Metric[] = [
         secondary_label: 'Andel av svingningene',
         breakdown: rows.slice(0, 12),
         facts: { top_name: top.label, top_weight: top.display, top_risk: top.secondary_display ?? '', top_paths: String(top.meta.eies_via), underlying_count: String(rows.length) },
-        provenance: { sources: [SOURCES.holdings, SOURCES.funds, SOURCES.prices], period: period(), as_of: model.fundHoldingsAsOf ?? undefined, rows_used: rows.length * DATES.length },
-        assumptions: [ASSUMPTIONS.lookThrough, ASSUMPTIONS.volatility, ASSUMPTIONS.covariance, ASSUMPTIONS.constantHoldings],
-        data_quality: qualityNotes(model, ctx.now, { risk: true, lookThrough: true }),
+        period: periodInfo(w),
+        provenance: { sources: [SOURCES.holdings, SOURCES.funds, SOURCES.prices], period: period(w), as_of: model.fundHoldingsAsOf ?? undefined, rows_used: rows.length * (w.end - w.start) },
+        assumptions: [ASSUMPTIONS.lookThrough, ASSUMPTIONS.volatility, ASSUMPTIONS.covariance, ASSUMPTIONS.constantHoldings, ASSUMPTIONS.synthetic],
+        data_quality: qualityNotes(model, ctx.now, { risk: true, lookThrough: true, window: w }),
       }
     },
   },
@@ -280,7 +328,8 @@ const METRICS: Metric[] = [
     compute(ctx) {
       const model = buildModel(ctx.customerId)
       if (model.total === 0) return empty(model, ctx.now)
-      const risk = exposureRisk(model)
+      const w = win(ctx)
+      const risk = exposureRisk(model, w)
       const groups = groupExposures(model, (e) => e.sector, risk.contributions).sort((a, b) => b.risk - a.risk)
       const tech = groups.find((g) => g.label === 'Technology')
       const top = groups[0]
@@ -290,14 +339,15 @@ const METRICS: Metric[] = [
         unit: 'text',
         value_label: 'Andel av verdien',
         secondary_label: 'Andel av svingningene',
-        breakdown: groups.map((g) => ({ label: sectorNb(g.label), value: round(g.weight), display: pct(g.weight), secondary: round(g.risk), secondary_display: pct(g.risk), meta: { verdi: kr(g.value) } })),
+        breakdown: groups.map((g) => ({ label: sectorNb(g.label), value: round(g.weight), display: pct(g.weight), secondary: round(g.risk), secondary_display: pct(g.risk), meta: { verdi: kr(g.value) }, drill: { dimension: 'sector' as const, value: g.label, label: sectorNb(g.label) } })),
         facts: {
           top_sector: sectorNb(top.label), top_sector_weight: pct(top.weight), top_sector_risk: pct(top.risk),
           tech_weight: pct(tech?.weight ?? 0), tech_risk: pct(tech?.risk ?? 0),
         },
-        provenance: { sources: [SOURCES.holdings, SOURCES.funds, SOURCES.prices], period: period(), as_of: model.fundHoldingsAsOf ?? undefined, rows_used: model.exposures.length * DATES.length },
-        assumptions: [ASSUMPTIONS.lookThrough, ASSUMPTIONS.volatility, ASSUMPTIONS.covariance, ASSUMPTIONS.constantHoldings],
-        data_quality: qualityNotes(model, ctx.now, { risk: true, lookThrough: true }),
+        period: periodInfo(w),
+        provenance: { sources: [SOURCES.holdings, SOURCES.funds, SOURCES.prices], period: period(w), as_of: model.fundHoldingsAsOf ?? undefined, rows_used: model.exposures.length * (w.end - w.start) },
+        assumptions: [ASSUMPTIONS.lookThrough, ASSUMPTIONS.volatility, ASSUMPTIONS.covariance, ASSUMPTIONS.constantHoldings, ASSUMPTIONS.synthetic],
+        data_quality: qualityNotes(model, ctx.now, { risk: true, lookThrough: true, window: w }),
       }
     },
   },
@@ -306,13 +356,15 @@ const METRICS: Metric[] = [
     title: 'Passer svingningene med risikoprofilen din?',
     question: 'Svinger porteføljen mer eller mindre enn det som er vanlig for risikoprofilen din?',
     params: [],
-    facts: ['vol', 'profile', 'range', 'status_text', 'horizon'],
+    facts: ['vol', 'profile', 'range', 'status_text', 'horizon', 'osebx_vol', 'period'],
     compute(ctx) {
       const model = buildModel(ctx.customerId)
       if (model.total === 0) return empty(model, ctx.now)
       const customer = getCustomer(ctx.customerId)
       const band = customer ? PROFILE_BANDS[customer.risk_profile] : undefined
-      const vol = exposureRisk(model).volatility * 100
+      const w = win(ctx)
+      const vol = exposureRisk(model, w).volatility * 100
+      const osebx = osebxStats(w).volatility_pct
       const profile = customer ? (PROFILE_NB[customer.risk_profile] ?? customer.risk_profile) : 'Ukjent'
       const status: MetricResult['status'] = !band ? 'unknown' : vol > band.max ? 'above' : vol < band.min ? 'below' : 'within'
       const statusText = {
@@ -321,20 +373,22 @@ const METRICS: Metric[] = [
         within: `Porteføljen svinger omtrent som forventet for en ${profile.toLowerCase()} profil.`,
         unknown: 'Vi kjenner ikke risikoprofilen din, så vi kan ikke sammenligne.',
       }[status]
-      const notes = qualityNotes(model, ctx.now, { risk: true, lookThrough: true })
+      const notes = qualityNotes(model, ctx.now, { risk: true, lookThrough: true, window: w })
       if (!band) notes.unshift({ severity: 'warning', message: 'Vi har ingen registrert risikoprofil for deg.' })
       return {
         value: round(vol),
         display: `±${pct(vol)} i året`,
         unit: '%',
         status,
+        benchmark: bench(`±${pct(osebx)}`, round(osebx)),
+        period: periodInfo(w),
         breakdown: band ? [
           { label: 'Porteføljen din', value: round(vol), display: `±${pct(vol)}` },
           { label: `Vanlig for ${profile.toLowerCase()} profil`, value: band.max, display: `${num(band.min)}–${num(band.max)} %`, meta: { fra: band.min, til: band.max } },
         ] : [],
-        facts: { vol: `±${pct(vol)}`, profile: profile.toLowerCase(), range: band ? `${num(band.min)}–${num(band.max)} %` : 'ukjent', status_text: statusText, horizon: customer?.investment_horizon.replace('years', 'år') ?? 'ukjent' },
-        provenance: { sources: [SOURCES.profile, SOURCES.holdings, SOURCES.funds, SOURCES.prices], period: period(), rows_used: model.exposures.length * DATES.length + 1 },
-        assumptions: [ASSUMPTIONS.bands, ASSUMPTIONS.volatility, ASSUMPTIONS.covariance],
+        facts: { vol: `±${pct(vol)}`, profile: profile.toLowerCase(), range: band ? `${num(band.min)}–${num(band.max)} %` : 'ukjent', status_text: statusText, horizon: customer?.investment_horizon.replace('years', 'år') ?? 'ukjent', osebx_vol: `±${pct(osebx)}`, period: windowLabel(w) },
+        provenance: { sources: [SOURCES.profile, SOURCES.holdings, SOURCES.funds, SOURCES.prices, SOURCES.osebx], period: period(w), rows_used: model.exposures.length * (w.end - w.start) + 1 },
+        assumptions: [ASSUMPTIONS.bands, ASSUMPTIONS.volatility, ASSUMPTIONS.covariance, ASSUMPTIONS.synthetic],
         data_quality: notes,
       }
     },
@@ -359,7 +413,7 @@ const METRICS: Metric[] = [
         unit: '%',
         status,
         value_label: 'Andel av verdien',
-        breakdown: groups.map((g) => ({ label: assetTypeNb(g.label), value: round(g.weight), display: pct(g.weight), meta: { verdi: kr(g.value) } })),
+        breakdown: groups.map((g) => ({ label: assetTypeNb(g.label), value: round(g.weight), display: pct(g.weight), meta: { verdi: kr(g.value) }, drill: { dimension: 'asset_type' as const, value: g.label, label: assetTypeNb(g.label) } })),
         facts: { equity_pct: pct(equity), max_pct: band ? pct(band.maxEquityPct, 0) : 'ukjent', profile: customer ? (PROFILE_NB[customer.risk_profile] ?? customer.risk_profile).toLowerCase() : 'ukjent' },
         provenance: { sources: [SOURCES.profile, SOURCES.holdings, SOURCES.funds], as_of: model.fundHoldingsAsOf ?? undefined, rows_used: model.exposures.length },
         assumptions: [ASSUMPTIONS.lookThrough, ASSUMPTIONS.bands],
@@ -393,7 +447,7 @@ const METRICS: Metric[] = [
         unit: '%',
         value_label: 'Andel av porteføljen',
         breakdown: [...byPath.entries()]
-          .map(([via, g]) => ({ label: g.name, value: round(share(g.value, model)), display: pct(share(g.value, model)), meta: { ticker: via === 'direct' ? '' : via, verdi: kr(g.value) } }))
+          .map(([via, g]) => ({ label: g.name, value: round(share(g.value, model)), display: pct(share(g.value, model)), meta: { ticker: via === 'direct' ? '' : via, verdi: kr(g.value) }, drill: via === 'direct' ? { dimension: 'sector' as const, value: 'Technology', label: 'Teknologi' } : { dimension: 'instrument' as const, value: via, label: g.name } }))
           .sort((a, b) => b.value - a.value),
         facts: {
           total_pct: pct(share(total, model)), total_kr: kr(total), direct_pct: pct(share(direct, model)),
@@ -416,7 +470,7 @@ const METRICS: Metric[] = [
       if (model.total === 0) return empty(model, ctx.now)
       const rows = model.exposures
         .filter((e) => e.paths.length >= 2 && e.asset_type !== 'Cash')
-        .map((e) => ({ label: e.name, value: round(share(e.value, model)), display: pct(share(e.value, model)), meta: { ticker: e.ticker, eies_via: pathsText(e, model), antall_steder: e.paths.length } }))
+        .map((e) => ({ label: e.name, value: round(share(e.value, model)), display: pct(share(e.value, model)), meta: { ticker: e.ticker, eies_via: pathsText(e, model), antall_steder: e.paths.length }, drill: { dimension: 'instrument' as const, value: e.ticker, label: e.name } }))
         .sort((a, b) => b.value - a.value)
       const top = rows[0]
       return {
@@ -448,7 +502,7 @@ const METRICS: Metric[] = [
         display: geographyNb(groups[0].label),
         unit: 'text',
         value_label: 'Andel av porteføljen',
-        breakdown: groups.map((g) => ({ label: geographyNb(g.label), value: round(g.weight), display: pct(g.weight), meta: { verdi: kr(g.value) } })),
+        breakdown: groups.map((g) => ({ label: geographyNb(g.label), value: round(g.weight), display: pct(g.weight), meta: { verdi: kr(g.value) }, drill: { dimension: 'geography' as const, value: g.label, label: geographyNb(g.label) } })),
         facts: { top_region: geographyNb(groups[0].label), top_pct: pct(groups[0].weight), us_pct: pct(groups.find((g) => g.label === 'United States')?.weight ?? 0), nordic_pct: pct(nordic) },
         provenance: { sources: [SOURCES.holdings, SOURCES.funds], as_of: model.fundHoldingsAsOf ?? undefined, rows_used: model.exposures.length },
         assumptions: [ASSUMPTIONS.lookThrough, 'Kontanter og norske obligasjoner regnes som Norge/Norden.'],
@@ -475,7 +529,7 @@ const METRICS: Metric[] = [
         display: `${num(effective, 0)} selskaper`,
         unit: 'count',
         value_label: 'Andel av porteføljen',
-        breakdown: invested.slice(0, 10).map((e) => ({ label: e.name, value: round(share(e.value, model)), display: pct(share(e.value, model)), meta: { sektor: sectorNb(e.sector), eies_via: pathsText(e, model) } })),
+        breakdown: invested.slice(0, 10).map((e) => ({ label: e.name, value: round(share(e.value, model)), display: pct(share(e.value, model)), meta: { sektor: sectorNb(e.sector), eies_via: pathsText(e, model) }, drill: { dimension: 'instrument' as const, value: e.ticker, label: e.name } })),
         facts: {
           top5_pct: pct(share(top5, model)), effective_n: num(effective, 0), underlying_n: String(invested.length), positions_n: String(model.positions.length),
           top_name: invested[0]?.name ?? '', top_pct: pct(share(invested[0]?.value ?? 0, model)),
@@ -506,10 +560,10 @@ const METRICS: Metric[] = [
       }
       const loss = [...lossByPosition.values()].reduce((s, v) => s + v, 0)
       const rows = model.positions
-        .map((p) => ({ name: p.name, loss: lossByPosition.get(p.ticker) ?? 0 }))
+        .map((p) => ({ name: p.name, ticker: p.ticker, loss: lossByPosition.get(p.ticker) ?? 0 }))
         .filter((r) => r.loss < 0)
         .sort((a, b) => a.loss - b.loss)
-        .map((r) => ({ label: r.name, value: Math.round(r.loss), display: `−${kr(-r.loss)}`, meta: { andel_av_tapet: pct(loss < 0 ? (r.loss / loss) * 100 : 0) } }))
+        .map((r) => ({ label: r.name, value: Math.round(r.loss), display: `−${kr(-r.loss)}`, meta: { andel_av_tapet: pct(loss < 0 ? (r.loss / loss) * 100 : 0) }, drill: { dimension: 'instrument' as const, value: r.ticker, label: r.name } }))
       const lossPct = share(loss, model)
       return {
         value: round(lossPct),
@@ -529,68 +583,148 @@ const METRICS: Metric[] = [
     },
   },
   {
-    id: 'historical_drawdown',
-    title: 'Det verste som skjedde i perioden',
-    question: 'Hva var den verste dagen og det største fallet fra en topp de siste 90 dagene?',
+    id: 'historical_episode',
+    title: 'Slik ville det gått i et ekte markedsfall',
+    question: 'Hvor mye ville dagens portefølje falt i et faktisk markedsfall fra historien, sammenlignet med OSEBX?',
+    params: [{ name: 'episode', description: 'Historisk periode med ekte indeksbevegelser.', values: HISTORICAL_EPISODES.map((e) => e.id) }],
+    facts: ['episode_name', 'start', 'end', 'portfolio_pct', 'portfolio_kr', 'osebx_pct', 'worst_pct', 'osebx_worst_pct'],
+    compute(ctx, params) {
+      const model = buildModel(ctx.customerId)
+      if (model.total === 0) return empty(model, ctx.now)
+      const episode = HISTORICAL_EPISODES.find((e) => e.id === params.episode)
+      if (!episode) throw new MetricError(`Ukjent episode "${params.episode}". Gyldige: ${HISTORICAL_EPISODES.map((e) => e.id).join(', ')}`)
+      const start = DATES.findIndex((d) => d >= episode.start)
+      const end = DATES.findIndex((d) => d >= episode.end)
+      if (start < 0 || end <= start) throw new MetricError('Perioden finnes ikke i kurshistorikken.')
+      const w: Window = { range: 'ALL', label: episode.name, start, end, startDate: DATES[start], endDate: DATES[end] }
+      const dates = DATES.slice(start, end + 1)
+      const p = seriesStats(portfolioValues(model, w), dates)
+      const o = seriesStats(osebxOn(dates), dates)
+      const changeKr = (model.total * p.return_pct) / 100
+      return {
+        value: round(p.return_pct),
+        display: signedPct(p.return_pct),
+        unit: '%',
+        benchmark: bench(signedPct(o.return_pct), round(o.return_pct)),
+        value_label: 'Din portefølje',
+        secondary_label: 'OSEBX',
+        breakdown: [
+          { label: 'Endring i perioden', value: round(p.return_pct), display: signedPct(p.return_pct), secondary: round(o.return_pct), secondary_display: signedPct(o.return_pct) },
+          { label: 'Største fall underveis', value: round(p.max_drawdown_pct), display: pct(p.max_drawdown_pct), secondary: round(o.max_drawdown_pct), secondary_display: pct(o.max_drawdown_pct) },
+        ],
+        facts: {
+          episode_name: episode.name, start: dateNb(DATES[start]), end: dateNb(DATES[end]),
+          portfolio_pct: pct(Math.abs(p.return_pct)), portfolio_kr: kr(Math.abs(changeKr)), osebx_pct: pct(Math.abs(o.return_pct)),
+          worst_pct: pct(Math.abs(p.max_drawdown_pct)), osebx_worst_pct: pct(Math.abs(o.max_drawdown_pct)),
+        },
+        provenance: { sources: [SOURCES.holdings, SOURCES.prices, SOURCES.osebx], period: `${dateNb(DATES[start])} – ${dateNb(DATES[end])}`, rows_used: model.positions.length * (end - start) },
+        assumptions: [`${episode.name}: ${episode.description}`, 'Regnestykket bruker dagens beholdning og verdi, som om du hadde eid akkurat dette da.', ASSUMPTIONS.synthetic],
+        data_quality: qualityNotes(model, ctx.now, {}),
+      }
+    },
+  },
+  {
+    id: 'benchmark_comparison',
+    title: 'Porteføljen din mot Oslo Børs',
+    question: 'Hvordan har porteføljen gått og svingt sammenlignet med OSEBX i valgt periode?',
     params: [],
-    facts: ['worst_day_pct', 'worst_day_date', 'worst_day_kr', 'max_drawdown_pct', 'max_drawdown_kr'],
+    facts: ['period', 'return_pct', 'osebx_return_pct', 'diff_pp', 'direction', 'vol', 'osebx_vol', 'max_dd', 'osebx_max_dd', 'change_kr'],
     compute(ctx) {
       const model = buildModel(ctx.customerId)
       if (model.total === 0) return empty(model, ctx.now)
-      const series = DATES.map((d) => model.positions.reduce((s, p) => s + p.quantity * (priceOn(p.ticker, d) ?? p.price), 0))
-      let worst = 0
-      let worstIdx = -1
-      let peak = series[0] ?? 0
-      let drawdown = 0
-      let drawdownKr = 0
-      series.forEach((v, i) => {
-        if (i > 0 && series[i - 1] > 0) {
-          const r = (v / series[i - 1] - 1) * 100
-          if (r < worst) {
-            worst = r
-            worstIdx = i
-          }
-        }
-        peak = Math.max(peak, v)
-        if (peak > 0 && (v / peak - 1) * 100 < drawdown) {
-          drawdown = (v / peak - 1) * 100
-          drawdownKr = peak - v
-        }
-      })
-      const worstKr = worstIdx > 0 ? series[worstIdx - 1] - series[worstIdx] : 0
+      const w = win(ctx)
+      const dates = DATES.slice(w.start, w.end + 1)
+      const values = portfolioValues(model, w)
+      const p = seriesStats(values, dates)
+      const o = osebxStats(w)
+      const diff = p.return_pct - o.return_pct
+      const change = values[values.length - 1] - values[0]
       return {
-        value: round(drawdown, 2),
-        display: pct(drawdown),
+        value: round(p.return_pct),
+        display: signedPct(p.return_pct),
         unit: '%',
+        benchmark: bench(signedPct(o.return_pct), round(o.return_pct)),
+        period: periodInfo(w),
+        value_label: 'Din portefølje',
+        secondary_label: OSEBX_NAME,
         breakdown: [
-          { label: 'Verste enkeltdag', value: round(worst, 2), display: `${pct(worst, 2)} (${kr(worstKr)})`, meta: { dato: dateNb(DATES[worstIdx] ?? null) } },
-          { label: 'Største fall fra en topp', value: round(drawdown, 2), display: `${pct(drawdown, 2)} (${kr(drawdownKr)})` },
+          { label: 'Avkastning', value: round(p.return_pct), display: signedPct(p.return_pct), secondary: round(o.return_pct), secondary_display: signedPct(o.return_pct) },
+          { label: 'Svingninger (årlig)', value: round(p.volatility_pct), display: `±${pct(p.volatility_pct)}`, secondary: round(o.volatility_pct), secondary_display: `±${pct(o.volatility_pct)}` },
+          { label: 'Største fall', value: round(p.max_drawdown_pct), display: pct(p.max_drawdown_pct), secondary: round(o.max_drawdown_pct), secondary_display: pct(o.max_drawdown_pct) },
+          { label: 'Verste dag', value: round(p.worst_day_pct, 2), display: pct(p.worst_day_pct, 2), secondary: round(o.worst_day_pct, 2), secondary_display: pct(o.worst_day_pct, 2) },
         ],
         facts: {
-          worst_day_pct: pct(Math.abs(worst), 2), worst_day_date: dateNb(DATES[worstIdx] ?? null), worst_day_kr: kr(worstKr),
-          max_drawdown_pct: pct(Math.abs(drawdown), 2), max_drawdown_kr: kr(drawdownKr),
+          period: windowLabel(w), return_pct: signedPct(p.return_pct), osebx_return_pct: signedPct(o.return_pct),
+          diff_pp: `${num(Math.abs(diff))} prosentpoeng`, direction: diff >= 0 ? 'bedre enn' : 'svakere enn',
+          vol: `±${pct(p.volatility_pct)}`, osebx_vol: `±${pct(o.volatility_pct)}`,
+          max_dd: pct(Math.abs(p.max_drawdown_pct)), osebx_max_dd: pct(Math.abs(o.max_drawdown_pct)),
+          change_kr: `${change >= 0 ? '+' : '−'}${kr(Math.abs(change))}`,
         },
-        provenance: { sources: [SOURCES.holdings, SOURCES.prices], period: period(), rows_used: model.positions.length * DATES.length },
-        assumptions: [ASSUMPTIONS.constantHoldings, 'Bare 90 dager er med, så et ordentlig krakk kan gi langt større fall.'],
-        data_quality: qualityNotes(model, ctx.now, { risk: true }),
+        provenance: { sources: [SOURCES.holdings, SOURCES.prices, SOURCES.osebx], period: period(w), rows_used: model.positions.length * (w.end - w.start) },
+        assumptions: [ASSUMPTIONS.constantHoldings, ASSUMPTIONS.synthetic, 'OSEBX er en ren norsk aksjeindeks. Porteføljen din har også utenlandske aksjer, obligasjoner og kontanter, så den er ikke direkte sammenlignbar.'],
+        data_quality: qualityNotes(model, ctx.now, { risk: true, window: w }),
+      }
+    },
+  },
+  {
+    id: 'historical_drawdown',
+    title: 'Det verste som skjedde i perioden',
+    question: 'Hva var den verste dagen og det største fallet fra en topp i valgt periode?',
+    params: [],
+    facts: ['worst_day_pct', 'worst_day_date', 'worst_day_kr', 'max_drawdown_pct', 'max_drawdown_kr', 'osebx_max_drawdown_pct', 'period'],
+    compute(ctx) {
+      const model = buildModel(ctx.customerId)
+      if (model.total === 0) return empty(model, ctx.now)
+      const w = win(ctx)
+      const series = portfolioValues(model, w)
+      const dates = DATES.slice(w.start, w.end + 1)
+      const p = seriesStats(series, dates)
+      const o = osebxStats(w)
+      let peak = series[0]
+      let drawdownKr = 0
+      for (const v of series) {
+        peak = Math.max(peak, v)
+        drawdownKr = Math.max(drawdownKr, peak - v)
+      }
+      const worstIdx = p.worst_day_date ? dates.indexOf(p.worst_day_date) : -1
+      const worstKr = worstIdx > 0 ? series[worstIdx - 1] - series[worstIdx] : 0
+      return {
+        value: round(p.max_drawdown_pct, 2),
+        display: pct(p.max_drawdown_pct),
+        unit: '%',
+        benchmark: bench(pct(o.max_drawdown_pct), round(o.max_drawdown_pct, 2)),
+        period: periodInfo(w),
+        value_label: 'Din portefølje',
+        secondary_label: 'OSEBX',
+        breakdown: [
+          { label: 'Verste enkeltdag', value: round(p.worst_day_pct, 2), display: `${pct(p.worst_day_pct, 2)} (${kr(worstKr)})`, secondary: round(o.worst_day_pct, 2), secondary_display: pct(o.worst_day_pct, 2), meta: { dato: dateNb(p.worst_day_date) } },
+          { label: 'Største fall fra en topp', value: round(p.max_drawdown_pct, 2), display: `${pct(p.max_drawdown_pct, 2)} (${kr(drawdownKr)})`, secondary: round(o.max_drawdown_pct, 2), secondary_display: pct(o.max_drawdown_pct, 2) },
+        ],
+        facts: {
+          worst_day_pct: pct(Math.abs(p.worst_day_pct), 2), worst_day_date: dateNb(p.worst_day_date), worst_day_kr: kr(worstKr),
+          max_drawdown_pct: pct(Math.abs(p.max_drawdown_pct), 2), max_drawdown_kr: kr(drawdownKr), osebx_max_drawdown_pct: pct(Math.abs(o.max_drawdown_pct), 2),
+          period: windowLabel(w),
+        },
+        provenance: { sources: [SOURCES.holdings, SOURCES.prices, SOURCES.osebx], period: period(w), rows_used: model.positions.length * (w.end - w.start) },
+        assumptions: [ASSUMPTIONS.constantHoldings, ASSUMPTIONS.synthetic],
+        data_quality: qualityNotes(model, ctx.now, { risk: true, window: w }),
       }
     },
   },
   {
     id: 'weight_drift',
     title: 'Slik har fordelingen glidd',
-    question: 'Hvordan har andelen i hver sektor endret seg bare fordi kursene har beveget seg?',
+    question: 'Hvordan har andelen i hver sektor endret seg i valgt periode bare fordi kursene har beveget seg?',
     params: [],
-    facts: ['top_sector', 'start_pct', 'end_pct', 'change_pp', 'tech_start_pct', 'tech_end_pct'],
+    facts: ['top_sector', 'start_pct', 'end_pct', 'change_pp', 'tech_start_pct', 'tech_end_pct', 'period'],
     compute(ctx) {
       const model = buildModel(ctx.customerId)
       if (model.total === 0) return empty(model, ctx.now)
-      const start = DATES[0]
-      const end = DATES[DATES.length - 1]
+      const w = win(ctx)
       const startValue = (e: Exposure) => {
-        const ps = priceOn(e.ticker, start)
-        const pe = priceOn(e.ticker, end)
-        return ps && pe ? e.value * (ps / pe) : e.value
+        if (!hasPriceHistory(e.ticker)) return e.value
+        const prices = pricesFor(e.ticker)
+        return prices[w.end] > 0 ? e.value * (prices[w.start] / prices[w.end]) : e.value
       }
       const startTotal = model.exposures.reduce((s, e) => s + startValue(e), 0)
       const sectors = new Map<string, { start: number; end: number }>()
@@ -609,15 +743,16 @@ const METRICS: Metric[] = [
         value: round(top.change),
         display: `${top.change >= 0 ? '+' : '−'}${num(Math.abs(top.change))} prosentpoeng`,
         unit: 'pp',
+        period: periodInfo(w),
         value_label: 'Nå',
-        secondary_label: 'For 90 dager siden',
-        breakdown: rows.map((r) => ({ label: sectorNb(r.label), value: round(r.end), display: pct(r.end), secondary: round(r.start), secondary_display: pct(r.start), meta: { endring: `${r.change >= 0 ? '+' : '−'}${num(Math.abs(r.change))} prosentpoeng` } })),
+        secondary_label: `Ved start (${dateNb(w.startDate)})`,
+        breakdown: rows.map((r) => ({ label: sectorNb(r.label), value: round(r.end), display: pct(r.end), secondary: round(r.start), secondary_display: pct(r.start), meta: { endring: `${r.change >= 0 ? '+' : '−'}${num(Math.abs(r.change))} prosentpoeng` }, drill: { dimension: 'sector' as const, value: r.label, label: sectorNb(r.label) } })),
         facts: {
           top_sector: sectorNb(top.label), start_pct: pct(top.start), end_pct: pct(top.end), change_pp: `${num(Math.abs(top.change))} prosentpoeng`,
-          tech_start_pct: pct(tech?.start ?? 0), tech_end_pct: pct(tech?.end ?? 0),
+          tech_start_pct: pct(tech?.start ?? 0), tech_end_pct: pct(tech?.end ?? 0), period: windowLabel(w),
         },
-        provenance: { sources: [SOURCES.holdings, SOURCES.funds, SOURCES.prices], period: period(), rows_used: model.exposures.length * 2 },
-        assumptions: [ASSUMPTIONS.constantHoldings, 'Viser bare endring fra kursbevegelser. Vi har ikke historikk over kjøp og salg, så glidningen over flere år kan være større.'],
+        provenance: { sources: [SOURCES.holdings, SOURCES.funds, SOURCES.prices], period: period(w), rows_used: model.exposures.length * 2 },
+        assumptions: [ASSUMPTIONS.constantHoldings, 'Viser bare endring fra kursbevegelser. Vi har ikke historikk over kjøp og salg, så den faktiske glidningen kan være annerledes.', ASSUMPTIONS.synthetic],
         data_quality: qualityNotes(model, ctx.now, { lookThrough: true }),
       }
     },
@@ -637,18 +772,20 @@ const METRICS: Metric[] = [
       const sector = String(params.sector ?? '')
       const pp = Number(params.pp)
       if (!sector || !Number.isFinite(pp) || pp <= 0 || pp > 100) throw new MetricError('what_if_shift trenger sector (engelsk sektornavn) og pp (1–100).')
+      const w = win(ctx)
       const weights = model.exposures.map((e) => share(e.value, model) / 100)
       const sectorWeight = model.exposures.reduce((s, e, i) => s + (e.sector === sector ? weights[i] : 0), 0)
       if (sectorWeight === 0) throw new MetricError(`Porteføljen har ingen eksponering mot sektoren "${sector}".`)
       const moved = Math.min(sectorWeight, pp / 100)
       const scale = (sectorWeight - moved) / sectorWeight
       const tickers = [...model.exposures.map((e) => e.ticker), 'CASHNOK']
-      const before = decomposeRisk(tickers, [...weights, 0]).volatility * 100
-      const after = decomposeRisk(tickers, [...model.exposures.map((e, i) => (e.sector === sector ? weights[i] * scale : weights[i])), moved]).volatility * 100
+      const before = decomposeRisk(tickers, [...weights, 0], w).volatility * 100
+      const after = decomposeRisk(tickers, [...model.exposures.map((e, i) => (e.sector === sector ? weights[i] * scale : weights[i])), moved], w).volatility * 100
       return {
         value: round(after),
         display: `±${pct(before)} → ±${pct(after)}`,
         unit: '%',
+        period: periodInfo(w),
         value_label: 'Svingninger i året',
         breakdown: [
           { label: 'Slik porteføljen er nå', value: round(before), display: `±${pct(before)}`, meta: { i_kroner: `±${kr((model.total * before) / 100)}` } },
@@ -658,9 +795,9 @@ const METRICS: Metric[] = [
           sector: sectorNb(sector), moved_pp: `${num(moved * 100)} prosentpoeng`, vol_before: `±${pct(before)}`, vol_after: `±${pct(after)}`,
           kr_before: `±${kr((model.total * before) / 100)}`, kr_after: `±${kr((model.total * after) / 100)}`,
         },
-        provenance: { sources: [SOURCES.holdings, SOURCES.funds, SOURCES.prices], period: period(), rows_used: model.exposures.length * DATES.length },
+        provenance: { sources: [SOURCES.holdings, SOURCES.funds, SOURCES.prices], period: period(w), rows_used: model.exposures.length * (w.end - w.start) },
         assumptions: ['Dette er en illustrasjon av hvordan risikoen henger sammen, ikke en anbefaling om å kjøpe eller selge.', 'Kontanter antas å ikke svinge. Skatt, kurtasje og forventet avkastning er ikke med.', ASSUMPTIONS.volatility],
-        data_quality: qualityNotes(model, ctx.now, { risk: true, lookThrough: true }),
+        data_quality: qualityNotes(model, ctx.now, { risk: true, lookThrough: true, window: w }),
       }
     },
   },
@@ -669,30 +806,33 @@ const METRICS: Metric[] = [
     title: 'Hvor ferske og komplette dataene er',
     question: 'Hvor gamle er kursene og fondsbeholdningene, og mangler noe?',
     params: [],
-    facts: ['price_end', 'days_since_price', 'holdings_as_of', 'days_since_holdings', 'trading_days', 'missing_count'],
+    facts: ['price_end', 'days_since_price', 'holdings_as_of', 'days_since_holdings', 'history_start', 'missing_count', 'osebx_mode', 'osebx_fetched'],
     compute(ctx) {
       const model = buildModel(ctx.customerId)
       const end = DATES[DATES.length - 1] ?? null
       const missing = model.positions.filter((p) => p.asset_type !== 'Cash' && !hasPriceHistory(p.ticker))
       const daysPrice = end ? daysBetween(end, ctx.now) : null
       const daysHoldings = model.fundHoldingsAsOf ? daysBetween(model.fundHoldingsAsOf, ctx.now) : null
+      const osebx = osebxSource()
       return {
         value: daysPrice,
         display: end ? `Kurser per ${dateNb(end)}` : 'Ingen kurser',
         unit: 'text',
         breakdown: [
           { label: 'Siste kurs', value: daysPrice ?? 0, display: `${dateNb(end)} (${daysPrice ?? '?'} dager siden)` },
+          { label: 'Kurshistorikk fra', value: 0, display: dateNb(DATES[0] ?? null) },
           { label: 'Fondenes beholdninger', value: daysHoldings ?? 0, display: model.fundHoldingsAsOf ? `${dateNb(model.fundHoldingsAsOf)} (${daysHoldings} dager siden)` : 'Du eier ingen fond' },
-          { label: 'Dager med kurshistorikk', value: DATES.length, display: `${DATES.length} dager` },
+          { label: 'OSEBX fra Yahoo Finance', value: 0, display: `${osebx.mode === 'live' ? 'Hentet live' : 'Lagret kopi'} ${dateNb(osebx.fetched_at.slice(0, 10))}, siste kurs ${dateNb(osebx.last_date)}` },
           { label: 'Investeringer uten kurshistorikk', value: missing.length, display: missing.length ? missing.map((p) => p.name).join(', ') : 'Ingen' },
         ],
         facts: {
           price_end: dateNb(end), days_since_price: String(daysPrice ?? 'ukjent'), holdings_as_of: dateNb(model.fundHoldingsAsOf),
-          days_since_holdings: String(daysHoldings ?? 'ukjent'), trading_days: String(DATES.length), missing_count: String(missing.length),
+          days_since_holdings: String(daysHoldings ?? 'ukjent'), history_start: dateNb(DATES[0] ?? null), missing_count: String(missing.length),
+          osebx_mode: osebx.mode === 'live' ? 'hentet live' : 'en lagret kopi', osebx_fetched: dateNb(osebx.fetched_at.slice(0, 10)),
         },
-        provenance: { sources: [SOURCES.holdings, SOURCES.prices, SOURCES.funds], period: period(), rows_used: model.positions.length },
-        assumptions: [],
-        data_quality: qualityNotes(model, ctx.now, { risk: true, lookThrough: model.positions.some((p) => p.is_fund) }),
+        provenance: { sources: [SOURCES.holdings, SOURCES.prices, SOURCES.funds, SOURCES.osebx], period: period(windowFor('ALL')), rows_used: model.positions.length },
+        assumptions: [ASSUMPTIONS.synthetic],
+        data_quality: qualityNotes(model, ctx.now, { lookThrough: model.positions.some((p) => p.is_fund) }),
       }
     },
   },

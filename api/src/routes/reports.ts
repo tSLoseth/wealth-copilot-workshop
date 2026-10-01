@@ -5,7 +5,15 @@ import { AI_MODEL, generateAiReport } from '../reports/ai.js'
 import { resolveReport, sanitizeScenarios, validateSpec } from '../reports/resolve.js'
 import { getStandardReport, listStandardReports } from '../reports/standard.js'
 import type { AiReportResponse, ReportSpec } from '../reports/types.js'
-import { customerActivity, listInteractions, logInteraction, updateInteraction } from '../services/interactionLog.js'
+import { customerActivity, listEvents, listInteractions, logEvent, logInteraction, updateInteraction } from '../services/interactionLog.js'
+import { DEFAULT_RANGE, isRange } from '../metrics/engine.js'
+import type { RangeKey } from '../reports/types.js'
+import { customerExposures, customerHistory, instrumentHistory, osebxHistory } from '../services/analytics.js'
+import { ensureFresh } from '../services/benchmark.js'
+
+function rangeFrom(value: unknown): RangeKey {
+  return isRange(value) ? value : DEFAULT_RANGE
+}
 
 export const reportsRouter = Router()
 
@@ -23,6 +31,29 @@ reportsRouter.get('/instruments/:ticker/holdings', (req, res) => {
   })
 })
 
+reportsRouter.get('/benchmarks/OSEBX', async (req, res) => {
+  await ensureFresh(3000)
+  res.json(osebxHistory(rangeFrom(req.query.range)))
+})
+
+reportsRouter.get('/instruments/:ticker/history', async (req, res) => {
+  await ensureFresh(1500)
+  const result = instrumentHistory(req.params.ticker, rangeFrom(req.query.range), req.query.benchmark === 'OSEBX')
+  if (!result) return res.status(404).json({ error: 'Unknown instrument' })
+  res.json(result)
+})
+
+reportsRouter.get('/customers/:customerId/history', async (req, res) => {
+  if (!getCustomer(req.params.customerId)) return res.status(404).json({ error: 'Customer not found' })
+  await ensureFresh(1500)
+  res.json(customerHistory(req.params.customerId, rangeFrom(req.query.range), req.query.benchmark === 'OSEBX'))
+})
+
+reportsRouter.get('/customers/:customerId/exposures', (req, res) => {
+  if (!getCustomer(req.params.customerId)) return res.status(404).json({ error: 'Customer not found' })
+  res.json(customerExposures(req.params.customerId, rangeFrom(req.query.range)))
+})
+
 reportsRouter.get('/customers/:customerId/reports', (req, res) => {
   if (!getCustomer(req.params.customerId)) return res.status(404).json({ error: 'Customer not found' })
   res.json({ reports: listStandardReports() })
@@ -32,7 +63,10 @@ reportsRouter.get('/customers/:customerId/reports/:reportId', (req, res) => {
   if (!getCustomer(req.params.customerId)) return res.status(404).json({ error: 'Customer not found' })
   const spec = getStandardReport(req.params.reportId)
   if (!spec) return res.status(404).json({ error: 'Report not found' })
-  res.json(resolveReport(spec, req.params.customerId, 'standard'))
+  const range = rangeFrom(req.query.range)
+  const report = resolveReport(spec, req.params.customerId, 'standard', new Date(), range)
+  logEvent({ customer_id: req.params.customerId, event_type: 'report_view', report_id: spec.id, report_title: report.title, report_source: 'standard', range, prompt: null, answer: null, intent: null })
+  res.json(report)
 })
 
 // Re-renders a saved spec with fresh numbers. Validated exactly like AI output.
@@ -42,9 +76,12 @@ reportsRouter.post('/customers/:customerId/reports/resolve', (req, res) => {
   const raw = req.body?.spec as ReportSpec | undefined
   if (!raw || typeof raw !== 'object') return res.status(400).json({ error: 'Body must include "spec"' })
   const spec: ReportSpec = { ...raw, id: String(raw.id ?? 'saved'), custom_scenarios: sanitizeScenarios(raw.custom_scenarios) }
-  const errors = validateSpec(spec, { customerId, customScenarios: spec.custom_scenarios ?? [], now: new Date() })
+  const range = rangeFrom(req.body?.range)
+  const errors = validateSpec(spec, { customerId, customScenarios: spec.custom_scenarios ?? [], now: new Date(), range })
   if (errors.length) return res.status(400).json({ error: 'Invalid report spec', details: errors })
-  res.json(resolveReport(spec, customerId, 'saved'))
+  const report = resolveReport(spec, customerId, 'saved', new Date(), range)
+  logEvent({ customer_id: customerId, event_type: 'report_view', report_id: spec.id, report_title: report.title, report_source: 'saved', range, prompt: null, answer: null, intent: null })
+  res.json(report)
 })
 
 // Simple in-memory limiter so a public demo URL can't burn through the API key.
@@ -67,7 +104,8 @@ reportsRouter.post('/customers/:customerId/reports/ai', aiRateLimit, async (req,
   if (prompt.length > 1000) return res.status(400).json({ error: 'Prompt is too long (max 1000 characters)' })
 
   const started = Date.now()
-  const result = await generateAiReport(customerId, prompt)
+  const range = rangeFrom(req.body?.range)
+  const result = await generateAiReport(customerId, prompt, new Date(), range)
   const interactionId = await logInteraction({
     customer_id: customerId,
     prompt,
@@ -106,6 +144,15 @@ function requireAdmin(req: Request, res: Response, next: NextFunction) {
 reportsRouter.get('/admin/customers/activity', requireAdmin, async (_req, res, next) => {
   try {
     res.json({ customers: await customerActivity() })
+  } catch (err) {
+    next(err)
+  }
+})
+
+reportsRouter.get('/admin/events', requireAdmin, async (req, res, next) => {
+  try {
+    const customerId = typeof req.query.customerId === 'string' ? req.query.customerId : undefined
+    res.json({ events: await listEvents(customerId) })
   } catch (err) {
     next(err)
   }

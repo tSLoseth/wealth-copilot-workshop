@@ -6,9 +6,10 @@ import Anthropic from '@anthropic-ai/sdk'
 import { getCustomer, getFundHoldings } from '../data.js'
 import { MetricError, STRESS_SCENARIOS, computeMetric, listMetrics, type MetricContext } from '../metrics/catalog.js'
 import { PROFILE_NB } from '../metrics/format.js'
+import { windowFor, windowLabel } from '../metrics/engine.js'
 import { resolveReport, sanitizeScenarios, validateSpec } from './resolve.js'
 import { getStandardReport } from './standard.js'
-import { FLAGS, TOPICS, type AiReportResponse, type AiTraceStep, type ReportBlockSpec, type ReportSpec, type StressScenario } from './types.js'
+import { FLAGS, TOPICS, type RangeKey, type AiReportResponse, type AiTraceStep, type ReportBlockSpec, type ReportSpec, type StressScenario } from './types.js'
 
 export const AI_MODEL = 'claude-opus-5-5'
 const MAX_TURNS = 8
@@ -30,6 +31,8 @@ Slik jobber du:
 Grounding – dette er absolutt:
 - Du skriver aldri tall selv, heller ikke årstall, prosenter eller beløp. Alle tall i tittel, intro, caption og tekst skal komme fra plassholdere: {{metric_id.fact}} eller {{metric_id(param=verdi).fact}}, med metrikker og facts fra katalogen nedenfor. Skriv for eksempel «{{tech_exposure.total_pct}} av pengene», aldri «64 % av pengene».
 - Beskriv bare det metrikkene faktisk viser. Si heller at noe ikke finnes i dataene enn å gjette.
+
+Tall som handler om svingninger, avkastning, fall og glidning er beregnet over perioden kunden har valgt i appen (se brukermeldingen). Bruk fact-en period når du skriver hvilken periode tallene gjelder. Spør kunden om en annen periode, bruker du likevel den valgte, og nevner det. Til sammenligning med Oslo Børs finnes benchmark_comparison, og historical_episode viser hvordan dagens portefølje ville klart seg i ekte markedsfall (koronakrakket, teknologifallet i 2022 osv.).
 
 Når kunden ber om et hypotetisk fall eller scenario («hva om teknologi faller 40 %?»), definerer du det i custom_scenarios med sector_shocks og/eller asset_type_shocks i prosent (negative tall er fall). Bruk så stress_test med scenario=<din id>. Gyldige sektorer: ${SECTORS.join(', ')}. Gyldige aktivatyper: ${ASSET_TYPES.join(', ')}. Bruk get_metric med custom_scenarios for å se resultatet først.
 
@@ -150,7 +153,7 @@ function paramText(params: unknown) {
 
 // Without an API key, or when the model fails, map the question to the
 // closest standard report so the customer still gets a grounded answer.
-export function fallbackReport(customerId: string, prompt: string, reason: string): AiResult {
+export function fallbackReport(customerId: string, prompt: string, reason: string, range?: RangeKey): AiResult {
   const p = prompt.toLowerCase()
   const wantsAdvice = ADVICE_PATTERN.test(prompt)
   const reportId = wantsAdvice
@@ -169,7 +172,7 @@ export function fallbackReport(customerId: string, prompt: string, reason: strin
     customer_notice: flags.length
       ? 'Vi kan ikke gi råd om kjøp eller salg, men rapporten under viser hvordan risikoen henger sammen. Rådgiveren din kan hjelpe deg med beslutningen.'
       : undefined,
-    report: resolveReport(spec, customerId, 'standard'),
+    report: resolveReport(spec, customerId, 'standard', new Date(), range),
     spec,
     trace: [{ tool: 'fallback', input: { reason }, summary: `AI-tjenesten var ikke tilgjengelig (${reason}). Viser nærmeste standardrapport: ${spec.title}` }],
     topics: [],
@@ -179,8 +182,8 @@ export function fallbackReport(customerId: string, prompt: string, reason: strin
   }
 }
 
-export async function generateAiReport(customerId: string, prompt: string, now = new Date()): Promise<AiResult> {
-  if (!process.env.ANTHROPIC_API_KEY) return fallbackReport(customerId, prompt, 'mangler API-nøkkel')
+export async function generateAiReport(customerId: string, prompt: string, now = new Date(), range?: RangeKey): Promise<AiResult> {
+  if (!process.env.ANTHROPIC_API_KEY) return fallbackReport(customerId, prompt, 'mangler API-nøkkel', range)
   const customer = getCustomer(customerId)!
   const client = new Anthropic({ timeout: 60_000, maxRetries: 1 })
   const trace: AiTraceStep[] = []
@@ -190,7 +193,7 @@ export async function generateAiReport(customerId: string, prompt: string, now =
   const messages: Anthropic.Beta.BetaMessageParam[] = [
     {
       role: 'user',
-      content: `Kunde: ${customer.first_name}, ${customer.age} år, risikoprofil ${PROFILE_NB[customer.risk_profile] ?? customer.risk_profile}, tidshorisont ${customer.investment_horizon.replace('years', 'år')}.\n\nSpørsmål fra kunden:\n${prompt}`,
+      content: `Kunde: ${customer.first_name}, ${customer.age} år, risikoprofil ${PROFILE_NB[customer.risk_profile] ?? customer.risk_profile}, tidshorisont ${customer.investment_horizon.replace('years', 'år')}. Valgt periode i appen: ${windowLabel(windowFor(range))} (${windowFor(range).startDate} til ${windowFor(range).endDate}).\n\nSpørsmål fra kunden:\n${prompt}`,
     },
   ]
 
@@ -226,7 +229,7 @@ export async function generateAiReport(customerId: string, prompt: string, now =
         if (call.name === 'get_metric') {
           const scenarios = sanitizeScenarios(input.custom_scenarios)
           if (scenarios.length) customScenarios = [...customScenarios.filter((s) => !scenarios.some((n) => n.id === s.id)), ...scenarios]
-          const ctx: MetricContext = { customerId, customScenarios, now }
+          const ctx: MetricContext = { customerId, customScenarios, now, range }
           const params = (input.params && typeof input.params === 'object' ? input.params : {}) as Record<string, string | number>
           try {
             const result = computeMetric(ctx, String(input.metric), params)
@@ -262,7 +265,7 @@ export async function generateAiReport(customerId: string, prompt: string, now =
             blocks: (Array.isArray(input.blocks) ? input.blocks : []) as ReportBlockSpec[],
             custom_scenarios: scenarios.length ? scenarios : customScenarios.length ? customScenarios : undefined,
           }
-          const errors = validateSpec(spec, { customerId, customScenarios: spec.custom_scenarios ?? [], now })
+          const errors = validateSpec(spec, { customerId, customScenarios: spec.custom_scenarios ?? [], now, range })
           if (typeof input.customer_notice === 'string' && /\d/.test(input.customer_notice)) {
             errors.push('customer_notice kan ikke inneholde tall. Skriv beskjeden uten tall.')
           }
@@ -278,7 +281,7 @@ export async function generateAiReport(customerId: string, prompt: string, now =
           return {
             status: 'ok',
             customer_notice: typeof input.customer_notice === 'string' && input.customer_notice.trim() ? input.customer_notice.trim() : undefined,
-            report: resolveReport(spec, customerId, 'ai', now),
+            report: resolveReport(spec, customerId, 'ai', now, range),
             spec,
             trace,
             topics: pickList(input.topics, TOPICS),
@@ -292,12 +295,12 @@ export async function generateAiReport(customerId: string, prompt: string, now =
       }
       messages.push({ role: 'user', content: results })
     }
-    const unfinished = fallbackReport(customerId, prompt, 'AI-en ble ikke ferdig')
+    const unfinished = fallbackReport(customerId, prompt, 'AI-en ble ikke ferdig', range)
     return { ...unfinished, trace: [...trace, ...unfinished.trace] }
   } catch (err) {
     console.error('AI report failed:', err instanceof Anthropic.APIError ? `${err.status} ${err.message}` : err)
     const reason = err instanceof Anthropic.RateLimitError ? 'for mange forespørsler' : err instanceof Anthropic.APIError ? `API-feil ${err.status}` : 'teknisk feil'
-    const fallback = fallbackReport(customerId, prompt, reason)
+    const fallback = fallbackReport(customerId, prompt, reason, range)
     return { ...fallback, trace: [...trace, ...fallback.trace] }
   }
 }

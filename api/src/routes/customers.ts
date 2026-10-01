@@ -4,6 +4,7 @@ import { calculatePortfolio, calculatePerformance } from '../services/portfolio.
 import { calculateRisk } from '../services/risk.js'
 import { generateInsights } from '../services/insights.js'
 import { deterministicCopilot } from '../services/copilot.js'
+import { logEvent } from '../services/interactionLog.js'
 
 export const customersRouter = Router()
 
@@ -93,5 +94,7 @@ customersRouter.post('/:customerId/copilot', (req, res) => {
   if (!customer) return res.status(404).json({ error: 'Customer not found' })
   const message = typeof req.body?.message === 'string' ? req.body.message : ''
   if (!message.trim()) return res.status(400).json({ error: 'Request body must include a non-empty "message" string' })
-  res.json(deterministicCopilot.answer(customer.customer_id, message))
+  const reply = deterministicCopilot.answer(customer.customer_id, message)
+  logEvent({ customer_id: customer.customer_id, event_type: 'copilot_chat', report_id: null, report_title: null, report_source: null, range: null, prompt: message.slice(0, 1000), answer: reply.answer, intent: reply.matched_intent })
+  res.json(reply)
 })

@@ -7,6 +7,7 @@
 //
 // Uses a seeded PRNG so the dataset is reproducible across machines
 // (re-running `npm run generate-data` always produces the same output).
+import { readFileSync } from 'node:fs'
 import { writeFile } from 'node:fs/promises'
 import path from 'node:path'
 import { fileURLToPath } from 'node:url'
@@ -120,21 +121,42 @@ for (const customer of customers) {
 }
 
 // --- Market data -----------------------------------------------------------
-// Daily prices per instrument, purely synthetic. Instruments share a market
-// factor (plus a technology factor for tech) so they move together like real
-// markets, and every fund's daily return is the weighted return of what it
-// holds - so the look-through in fund_holdings.json and the fund's price
-// behaviour are consistent.
-const today = new Date('2026-09-06T00:00:00Z')
-const dates = []
-for (let d = MARKET_DATA_DAYS - 1; d >= 0; d -= 1) {
-  const date = new Date(today)
-  date.setUTCDate(date.getUTCDate() - d)
-  dates.push(date.toISOString().slice(0, 10))
-}
+// Synthetic instruments driven by REAL market factors: daily returns of OSEBX,
+// S&P 500 and Nasdaq from a Yahoo Finance snapshot (data/benchmarks/yahoo.json,
+// refreshed with `npm run fetch-market`). Nordic companies follow OSEBX, the
+// rest follow S&P 500, and technology companies also follow the Nasdaq-minus-
+// S&P spread. Company-specific noise is synthetic. Every fund's daily return
+// is the weighted return of what it holds, so look-through and fund prices
+// are consistent.
+const snapshot = JSON.parse(readFileSync(path.join(__dirname, 'benchmarks', 'yahoo.json'), 'utf8'))
+const seriesMaps = Object.fromEntries(Object.entries(snapshot.series).map(([symbol, s]) => [symbol, new Map(s.points)]))
+const lastCommon = Math.min(...Object.values(snapshot.series).map((s) => Date.parse(s.points.at(-1)[0])))
+const dates = [...new Set([...seriesMaps['OSEBX.OL'].keys(), ...seriesMaps['^GSPC'].keys()])]
+  .filter((d) => Date.parse(d) <= lastCommon)
+  .sort()
+const DAYS = dates.length
+const today = new Date(`${dates.at(-1)}T00:00:00Z`)
 
-// Idiosyncratic draws come from the main stream in the original order, so
-// every later draw (holdings, transactions) stays identical to before.
+// Daily return of a factor; 0 on days its exchange was closed.
+function factorReturns(symbol) {
+  const map = seriesMaps[symbol]
+  let previous
+  return dates.map((d) => {
+    const close = map.get(d)
+    if (close === undefined) return 0
+    const r = previous ? close / previous - 1 : 0
+    previous = close
+    return r
+  })
+}
+const osebx = factorReturns('OSEBX.OL')
+const spx = factorReturns('^GSPC')
+const nasdaq = factorReturns('^IXIC')
+const NORDIC = new Set(['Norway', 'Sweden', 'Denmark', 'Finland', 'Nordics'])
+
+// The last MARKET_DATA_DAYS idiosyncratic draws per instrument come from the
+// main stream in the original order, so every later draw (holdings,
+// transactions) stays identical. Older history uses the separate stream.
 const idiosyncratic = new Map()
 for (const instrument of ALL_INSTRUMENTS) {
   const draws = []
@@ -149,19 +171,11 @@ const INDEX_ONLY = [
   ...INDEX_ONLY_EQUITIES.map((i) => ({ ...i, assetType: 'Equity' })),
   ...INDEX_ONLY_BONDS.map((i) => ({ ...i, assetType: 'Bond' })),
 ]
-for (const instrument of INDEX_ONLY) {
-  const draws = []
-  for (let d = 0; d < MARKET_DATA_DAYS; d += 1) {
-    draws.push(instrument.assetType === 'Bond' ? factorFloat(-0.15, 0.18) / 100 : factorFloat(-2.2, 2.3) / 100)
-  }
-  idiosyncratic.set(instrument.ticker, draws)
-}
-
-const marketFactor = []
-const techFactor = []
-for (let d = 0; d < MARKET_DATA_DAYS; d += 1) {
-  marketFactor.push(factorFloat(-1.3, 1.4) / 100)
-  techFactor.push(factorFloat(-1.6, 1.62) / 100)
+const olderDraw = (assetType) => (assetType === 'Cash' ? 0 : assetType === 'Bond' ? factorFloat(-0.15, 0.18) / 100 : factorFloat(-2.2, 2.3) / 100)
+for (const instrument of [...ALL_INSTRUMENTS, ...INDEX_ONLY]) {
+  const recent = idiosyncratic.get(instrument.ticker) ?? Array.from({ length: MARKET_DATA_DAYS }, () => olderDraw(instrument.assetType))
+  const older = Array.from({ length: DAYS - MARKET_DATA_DAYS }, () => olderDraw(instrument.assetType))
+  idiosyncratic.set(instrument.ticker, [...older, ...recent])
 }
 
 const instrumentByTicker = new Map([...ALL_INSTRUMENTS, ...INDEX_ONLY].map((i) => [i.ticker, i]))
@@ -169,10 +183,12 @@ const returnsByTicker = new Map()
 for (const instrument of instrumentByTicker.values()) {
   if (FUND_COMPOSITION[instrument.ticker]) continue
   const idio = idiosyncratic.get(instrument.ticker)
+  const market = NORDIC.has(instrument.geography) ? osebx : spx
   returnsByTicker.set(instrument.ticker, idio.map((r, d) => {
     if (instrument.assetType === 'Cash') return 0
     if (instrument.assetType === 'Bond') return r
-    return r * 0.6 + marketFactor[d] + (instrument.sector === 'Technology' ? techFactor[d] : 0)
+    // Centre the noise so it adds risk but no extra long-run drift.
+    return (r - 0.0005) * 0.5 + market[d] + (instrument.sector === 'Technology' ? nasdaq[d] - spx[d] : 0)
   }))
 }
 
@@ -203,7 +219,7 @@ for (const instrument of instrumentByTicker.values()) {
       geography: instrument.geography,
     })
   })
-  latestPriceByTicker.set(instrument.ticker, price)
+  latestPriceByTicker.set(instrument.ticker, Number(price.toFixed(2)))
 }
 
 // Funds report their holdings with a delay, like real fund disclosures.
