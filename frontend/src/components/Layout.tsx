@@ -51,7 +51,6 @@ export default function Layout() {
           <NavLink to="/" end>Oversikt</NavLink>
           <NavLink to="/portfolio">Portefølje</NavLink>
           <NavLink to="/risiko">Risiko</NavLink>
-          <NavLink to="/insights">Innsikter</NavLink>
           <NavLink to="/copilot">Wealth Copilot</NavLink>
           <NavLink to="/rapporter">Rapporter</NavLink>
           <NavLink to="/admin">Rådgiver</NavLink>

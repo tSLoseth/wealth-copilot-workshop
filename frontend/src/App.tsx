@@ -1,8 +1,7 @@
-import { HashRouter, Route, Routes } from 'react-router-dom'
+import { HashRouter, Route, Routes, Navigate } from 'react-router-dom'
 import Layout from './components/Layout'
 import Dashboard from './pages/Dashboard'
 import Portfolio from './pages/Portfolio'
-import Insights from './pages/Insights'
 import Risk from './pages/Risk'
 import Copilot from './pages/Copilot'
 import Reports from './pages/Reports'
@@ -25,7 +24,7 @@ export default function App() {
                 <Route index element={<Dashboard />} />
                 <Route path="portfolio" element={<Portfolio />} />
                 <Route path="risiko" element={<Risk />} />
-                <Route path="insights" element={<Insights />} />
+                <Route path="insights" element={<Navigate to="/risiko" replace />} />
                 <Route path="copilot" element={<Copilot />} />
                 <Route path="rapporter" element={<Reports />} />
                 <Route path="admin" element={<Admin />} />

@@ -9,6 +9,7 @@ import ProfileGauge from '../components/risk/ProfileGauge'
 import RiskBars from '../components/risk/RiskBars'
 import { PeriodChip, RangePicker, RiskSection } from '../components/risk/RiskParts'
 import WhatIf from '../components/risk/WhatIf'
+import { EconomySection, RiskInsightsSection } from '../components/risk/InsightSections'
 import { isEmptyMetric, useMetric } from '../components/risk/useMetric'
 
 const STATUS_TEXT: Record<string, string> = { within: 'Innenfor profilen', above: 'Over profilen', below: 'Under profilen' }
@@ -104,12 +105,14 @@ export default function Risk() {
           <p className="eyebrow">Risiko{name ? ` · ${name}` : ''}</p>
           <h2>Risiko – hvor kommer svingningene fra?</h2>
           <p className="page-heading__lead">
-            Her ser du hvor mye porteføljen kan gå opp og ned, hvilke investeringer som står for svingningene, og om det passer med
-            profilen din. Klikk på en rad for å se detaljer.
+            Først det viktigste vi ser, deretter hvor mye porteføljen kan gå opp og ned, hvilke investeringer som står for
+            svingningene, og om det passer med profilen din. Klikk på en rad for å se detaljer.
           </p>
         </div>
         <RangePicker />
       </div>
+
+      <RiskInsightsSection />
 
       <RiskSection
         eyebrow="Profil"
@@ -276,6 +279,8 @@ export default function Risk() {
         </header>
         <WhatIf customerId={id} sectors={bySector.data} />
       </section>
+
+      <EconomySection />
 
       <section className="risk-cta">
         <div>
