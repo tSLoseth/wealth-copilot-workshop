@@ -263,6 +263,9 @@ export async function generateAiReport(customerId: string, prompt: string, now =
             custom_scenarios: scenarios.length ? scenarios : customScenarios.length ? customScenarios : undefined,
           }
           const errors = validateSpec(spec, { customerId, customScenarios: spec.custom_scenarios ?? [], now })
+          if (typeof input.customer_notice === 'string' && /\d/.test(input.customer_notice)) {
+            errors.push('customer_notice kan ikke inneholde tall. Skriv beskjeden uten tall.')
+          }
           if (errors.length) {
             trace.push({ tool: 'submit_report', input: { title: spec.title }, summary: `Avvist av validering (${errors.length} feil) – AI-en retter` })
             fail(`Rapporten ble ikke godkjent. Rett dette og send på nytt:\n- ${errors.join('\n- ')}`)
