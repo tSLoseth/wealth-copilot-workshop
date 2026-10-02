@@ -3,6 +3,7 @@ import Layout from './components/Layout'
 import Dashboard from './pages/Dashboard'
 import Portfolio from './pages/Portfolio'
 import Risk from './pages/Risk'
+import Costs from './pages/Costs'
 import Copilot from './pages/Copilot'
 import Reports from './pages/Reports'
 import Admin from './pages/Admin'
@@ -24,6 +25,7 @@ export default function App() {
                 <Route index element={<Dashboard />} />
                 <Route path="portfolio" element={<Portfolio />} />
                 <Route path="risiko" element={<Risk />} />
+                <Route path="kostnader" element={<Costs />} />
                 <Route path="insights" element={<Navigate to="/risiko" replace />} />
                 <Route path="copilot" element={<Copilot />} />
                 <Route path="rapporter" element={<Reports />} />

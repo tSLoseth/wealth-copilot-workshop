@@ -3530,3 +3530,20 @@ button.riskbars__row:hover {
     font-size: 0.68rem;
   }
 }
+
+/* Advisor customer panel */
+.advisor-panel { margin-bottom: 1.5rem; display: grid; gap: 0.75rem; }
+.advisor-panel h4 { margin: 0.5rem 0 0; }
+.advisor-profile { display: grid; grid-template-columns: repeat(auto-fit, minmax(150px, 1fr)); gap: 0.5rem 1rem; margin: 0; }
+.advisor-profile dt { font-size: 0.75rem; color: #5b6478; }
+.advisor-profile dd { margin: 0; font-weight: 600; }
+.advisor-reports { display: flex; flex-wrap: wrap; gap: 0.5rem; }
+.advisor-ask { display: flex; gap: 0.5rem; }
+.advisor-ask input { flex: 1; min-width: 0; padding: 0.6rem 0.8rem; border: 1px solid #d5d9e3; border-radius: 8px; }
+.advisor-note { font-size: 0.8rem; color: #5b6478; margin: 0; }
+
+/* Costs */
+.data-table { width: 100%; border-collapse: collapse; font-size: 0.9rem; }
+.data-table th, .data-table td { text-align: left; padding: 0.5rem 0.6rem; border-bottom: 1px solid #e6e9f0; }
+.data-table th { font-size: 0.75rem; color: #5b6478; text-transform: uppercase; letter-spacing: 0.03em; }
+@media (max-width: 640px) { .data-table { display: block; overflow-x: auto; } }

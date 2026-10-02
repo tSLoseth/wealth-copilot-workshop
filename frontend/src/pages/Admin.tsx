@@ -6,6 +6,7 @@ import CustomerSummary from '../components/admin/CustomerSummary'
 import EventCard from '../components/admin/EventCard'
 import FlagChip from '../components/admin/FlagChip'
 import InteractionCard, { type InteractionPatch } from '../components/admin/InteractionCard'
+import AdvisorCustomerPanel from '../components/admin/AdvisorCustomerPanel'
 import { formatDateNo } from '../utils/format'
 
 const TOKEN_KEY = 'wc.adminToken'
@@ -294,6 +295,7 @@ export default function Admin() {
                 </p>
               </header>
             )}
+            {selectedId && <AdvisorCustomerPanel customerId={selectedId} />}
             {selectedId && !loaded && <p className="loading-state">Henter aktivitet …</p>}
             {interactionsError && <p className="error-state">{interactionsError}</p>}
             {eventsError && <p className="error-state">{eventsError}</p>}
